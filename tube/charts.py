@@ -126,7 +126,6 @@ def week_heatmap(grid: dict[str, list[float]]) -> go.Figure:
             xgap=0,
             ygap=2,
             colorbar=dict(
-                title=dict(text="% of<br>baseline", side="top"),
                 ticksuffix="%",
                 thickness=10,
                 len=0.9,
