@@ -25,7 +25,7 @@ Checked against the live API, including a sweep of all 270 tube stations.
 
 ## Coverage (tube only)
 
-- 267/270 stations return a full 7x96 typical grid; **252** have real (non-zero) data.
+- 267/270 stations return a full 7x96 typical grid; **253** have real (non-zero) data.
 - No usable typical data: **Monument** (`isFound: false`, and Bank has data),
   **Hammersmith (District & Piccadilly)**, plus 15 stations that return an all-zero grid:
   Arsenal, Caledonian Road, Canning Town, Colindale, Heathrow T5, Holloway Road,
