@@ -1,4 +1,5 @@
 """Parsing tests against real TfL responses saved in tests/fixtures (no network)."""
+
 import json
 import math
 from datetime import datetime
@@ -43,16 +44,23 @@ def test_band_lands_in_the_right_slot():
 
 
 def test_last_band_crossing_midnight_is_slot_95():
-    day = parse_day({"dayOfWeek": "MON", "timeBands": [{"timeBand": "23:45-00:00", "percentageOfBaseLine": 0.3}]})
+    day = parse_day(
+        {"dayOfWeek": "MON", "timeBands": [{"timeBand": "23:45-00:00", "percentageOfBaseLine": 0.3}]}
+    )
     assert day.values[95] == 0.3
     assert math.isnan(day.values[0])
 
 
 def test_duplicate_bands_are_averaged():
-    day = parse_day({"dayOfWeek": "MON", "timeBands": [
-        {"timeBand": "16:00-16:15", "percentageOfBaseLine": 0.2},
-        {"timeBand": "16:00-16:15", "percentageOfBaseLine": 0.3},
-    ]})
+    day = parse_day(
+        {
+            "dayOfWeek": "MON",
+            "timeBands": [
+                {"timeBand": "16:00-16:15", "percentageOfBaseLine": 0.2},
+                {"timeBand": "16:00-16:15", "percentageOfBaseLine": 0.3},
+            ],
+        }
+    )
     assert day.values[64] == pytest.approx(0.25)
 
 
@@ -62,11 +70,16 @@ def test_real_duplicate_band_station_still_gives_96_slots():
 
 
 def test_bad_bands_are_skipped_not_fatal():
-    day = parse_day({"dayOfWeek": "mon", "timeBands": [
-        {"timeBand": "garbage", "percentageOfBaseLine": 0.5},
-        {"timeBand": "09:00-09:15", "percentageOfBaseLine": None},
-        {"timeBand": "09:15-09:30", "percentageOfBaseLine": 0.4},
-    ]})
+    day = parse_day(
+        {
+            "dayOfWeek": "mon",
+            "timeBands": [
+                {"timeBand": "garbage", "percentageOfBaseLine": 0.5},
+                {"timeBand": "09:00-09:15", "percentageOfBaseLine": None},
+                {"timeBand": "09:15-09:30", "percentageOfBaseLine": 0.4},
+            ],
+        }
+    )
     assert day.day == "MON"
     assert day.values[37] == 0.4
     assert math.isnan(day.values[36])
@@ -95,16 +108,20 @@ def test_live_available():
     assert reading.time_local == datetime(2026, 10, 6, 22, 1)
 
 
-@pytest.mark.parametrize("raw", [
-    load("live_unavailable.json"),
-    {"dataAvailable": True, "percentageOfBaseline": 0.2, "timeLocal": None},
-    None,
-])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        load("live_unavailable.json"),
+        {"dataAvailable": True, "percentageOfBaseline": 0.2, "timeLocal": None},
+        None,
+    ],
+)
 def test_live_missing_or_broken_returns_none(raw):
     assert parse_live(raw) is None
 
 
 # ---------- HTTP error mapping, with a fake session instead of the network ----------
+
 
 class FakeResponse:
     def __init__(self, status: int, body=None):
@@ -128,14 +145,17 @@ class FakeSession:
         return self.result
 
 
-@pytest.mark.parametrize("result, error", [
-    (FakeResponse(429), RateLimited),
-    (FakeResponse(503), ApiUnavailable),
-    (FakeResponse(404), StationNotCovered),
-    (FakeResponse(200, None), MalformedResponse),
-    (requests.Timeout(), ApiUnavailable),
-    (requests.ConnectionError(), ApiUnavailable),
-])
+@pytest.mark.parametrize(
+    "result, error",
+    [
+        (FakeResponse(429), RateLimited),
+        (FakeResponse(503), ApiUnavailable),
+        (FakeResponse(404), StationNotCovered),
+        (FakeResponse(200, None), MalformedResponse),
+        (requests.Timeout(), ApiUnavailable),
+        (requests.ConnectionError(), ApiUnavailable),
+    ],
+)
 def test_http_errors_become_friendly_tfl_errors(result, error):
     with pytest.raises(error):
         TflClient(session=FakeSession(result)).week_profile("940GZZLUKSX")

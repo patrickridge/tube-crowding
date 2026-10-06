@@ -1,4 +1,5 @@
 """Pure analysis functions: no Streamlit, no network. Values are TfL baseline fractions."""
+
 from __future__ import annotations
 
 import math
@@ -20,7 +21,7 @@ def smooth(values: tuple[float, ...] | list[float], window: int = SMOOTHING_WIND
     half = window // 2
     out = []
     for i in range(len(values)):
-        neighbours = [v for v in values[max(0, i - half): i + half + 1] if not math.isnan(v)]
+        neighbours = [v for v in values[max(0, i - half) : i + half + 1] if not math.isnan(v)]
         out.append(sum(neighbours) / len(neighbours) if neighbours else math.nan)
     return out
 
@@ -31,6 +32,7 @@ def time_to_slot(hour: int, minute: int) -> int:
 
 
 # ---------- best time to travel ----------
+
 
 @dataclass(frozen=True)
 class BestTime:
@@ -53,8 +55,9 @@ def window_slots(start_slot: int, end_slot: int) -> list[int]:
     return list(range(start_slot, end_slot + 1))
 
 
-def best_time(today: list[float], start_slot: int, end_slot: int,
-              tomorrow: list[float] | None = None) -> BestTime | None:
+def best_time(
+    today: list[float], start_slot: int, end_slot: int, tomorrow: list[float] | None = None
+) -> BestTime | None:
     """Least and most crowded departure slots in a window, using the (smoothed) profile.
 
     Metric: the minimum of the profile over the window. Ties go to the earliest slot,
@@ -80,8 +83,12 @@ def best_time(today: list[float], start_slot: int, end_slot: int,
 MIN_TYPICAL_FOR_RATIO = 0.03
 # Ratio thresholds: a judgement call, not calibrated. Within +/-10% of typical we say "usual"
 # so ordinary day-to-day noise doesn't read as news.
-BANDS = [(0.75, "much quieter than usual"), (0.9, "quieter than usual"),
-         (1.1, "about as busy as usual"), (1.25, "busier than usual")]
+BANDS = [
+    (0.75, "much quieter than usual"),
+    (0.9, "quieter than usual"),
+    (1.1, "about as busy as usual"),
+    (1.25, "busier than usual"),
+]
 
 
 @dataclass(frozen=True)
@@ -111,9 +118,9 @@ def typical_at(week: WeekProfile, when: datetime) -> float:
 
 # ---------- heatmap ----------
 
+
 def week_grid(week: WeekProfile) -> dict[str, list[float]]:
     """Smoothed profile for each day, Monday first; days TfL didn't send are all NaN."""
     return {
-        day: smooth(week.days[day].values) if day in week.days else [math.nan] * SLOTS_PER_DAY
-        for day in DAYS
+        day: smooth(week.days[day].values) if day in week.days else [math.nan] * SLOTS_PER_DAY for day in DAYS
     }

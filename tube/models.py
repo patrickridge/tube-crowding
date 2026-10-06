@@ -1,4 +1,5 @@
 """Typed data structures shared by every layer. Nothing here touches the network."""
+
 from __future__ import annotations
 
 import math

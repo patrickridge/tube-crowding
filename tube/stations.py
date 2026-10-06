@@ -1,4 +1,5 @@
 """Load the static station list (see scripts/build_stations.py)."""
+
 from __future__ import annotations
 
 import csv

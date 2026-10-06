@@ -3,6 +3,7 @@
 Two halves: `parse_*` functions turn raw JSON into models (pure, tested against saved
 responses), and `TflClient` does the HTTP. Callers only ever see models or a TflError.
 """
+
 from __future__ import annotations
 
 import math
@@ -39,6 +40,7 @@ class MalformedResponse(TflError):
 
 # ---------- parsing ----------
 
+
 def _band_to_slot(band: str) -> int:
     """'08:15-08:30' -> 33."""
     hours, minutes = band.split("-")[0].split(":")
@@ -62,7 +64,7 @@ def parse_day(raw: dict[str, Any]) -> DayProfile:
         # values; we average them rather than guess which one is right.
         sums[slot] += value
         counts[slot] += 1
-    values = tuple(s / c if c else math.nan for s, c in zip(sums, counts))
+    values = tuple(s / c if c else math.nan for s, c in zip(sums, counts, strict=True))
     return DayProfile(
         day=str(raw.get("dayOfWeek", "")).upper(),
         values=values,
@@ -101,6 +103,7 @@ def parse_live(raw: Any) -> LiveReading | None:
 
 
 # ---------- HTTP ----------
+
 
 class TflClient:
     def __init__(self, app_key: str | None = None, session: requests.Session | None = None):

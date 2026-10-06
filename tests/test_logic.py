@@ -1,4 +1,5 @@
 """Logic tests with small hand-checkable numbers."""
+
 import math
 from datetime import datetime
 
@@ -23,6 +24,7 @@ def flat_day(value: float = 0.1) -> list[float]:
 
 
 # ---------- smoothing ----------
+
 
 def test_smooth_centred_average():
     assert smooth([0, 3, 0, 3, 0]) == pytest.approx([1.5, 1, 2, 1, 1.5])
@@ -50,10 +52,11 @@ def test_time_to_slot():
 
 # ---------- best time ----------
 
+
 def test_best_time_picks_minimum_in_window():
     day = flat_day(0.5)
     day[30], day[31], day[32] = 0.4, 0.1, 0.3  # 07:30, 07:45, 08:00
-    day[36] = 0.8                               # 09:00
+    day[36] = 0.8  # 09:00
     result = best_time(day, 30, 38)  # 07:30 to 09:30
     assert (result.best_slot, result.best_value) == (31, 0.1)
     assert (result.worst_slot, result.worst_value) == (36, 0.8)
@@ -74,8 +77,8 @@ def test_best_time_ties_go_to_earliest():
 
 def test_best_time_window_spanning_midnight_uses_next_day():
     today, tomorrow = flat_day(0.5), flat_day(0.5)
-    today[1] = 0.0        # 00:15 *today* must be ignored...
-    tomorrow[1] = 0.05    # ...in favour of 00:15 *tomorrow*
+    today[1] = 0.0  # 00:15 *today* must be ignored...
+    tomorrow[1] = 0.05  # ...in favour of 00:15 *tomorrow*
     assert window_slots(94, 2) == [94, 95, 96, 97, 98]
     result = best_time(today, 94, 2, tomorrow=tomorrow)  # 23:30 to 00:30
     assert (result.best_slot, result.best_value) == (1, 0.05)
@@ -103,13 +106,17 @@ def test_quieter_by_is_zero_when_window_is_empty_station():
 
 # ---------- live vs typical ----------
 
-@pytest.mark.parametrize("live, typical, verdict", [
-    (0.10, 0.20, "much quieter than usual"),     # ratio 0.5
-    (0.17, 0.20, "quieter than usual"),          # 0.85
-    (0.20, 0.20, "about as busy as usual"),      # 1.0
-    (0.23, 0.20, "busier than usual"),           # 1.15
-    (0.30, 0.20, "much busier than usual"),      # 1.5
-])
+
+@pytest.mark.parametrize(
+    "live, typical, verdict",
+    [
+        (0.10, 0.20, "much quieter than usual"),  # ratio 0.5
+        (0.17, 0.20, "quieter than usual"),  # 0.85
+        (0.20, 0.20, "about as busy as usual"),  # 1.0
+        (0.23, 0.20, "busier than usual"),  # 1.15
+        (0.30, 0.20, "much busier than usual"),  # 1.5
+    ],
+)
 def test_compare_live_verdicts(live, typical, verdict):
     result = compare_live(live, typical)
     assert result.verdict == verdict
@@ -133,6 +140,7 @@ def test_compare_live_unknown_typical():
 
 # ---------- week helpers ----------
 
+
 def make_week(days: dict[str, list[float]]) -> WeekProfile:
     return WeekProfile("X", {d: DayProfile(d, tuple(v)) for d, v in days.items()})
 
@@ -142,7 +150,7 @@ def test_typical_at_uses_weekday_and_band():
     tue[36] = 0.4  # 09:00, smoothed with neighbours 0.1 -> 0.2
     week = make_week({"TUE": tue})
     assert typical_at(week, datetime(2026, 10, 6, 9, 7)) == pytest.approx(0.2)  # a Tuesday
-    assert math.isnan(typical_at(week, datetime(2026, 10, 5, 9, 7)))           # Monday missing
+    assert math.isnan(typical_at(week, datetime(2026, 10, 5, 9, 7)))  # Monday missing
 
 
 def test_week_grid_orders_days_and_fills_missing():

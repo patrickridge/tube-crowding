@@ -3,6 +3,7 @@
 The station list changes rarely, so we ship it as a static file: autocomplete is then
 instant and costs no API calls. Run:  python scripts/build_stations.py
 """
+
 import csv
 from pathlib import Path
 
