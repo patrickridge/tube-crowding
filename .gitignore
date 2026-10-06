@@ -7,3 +7,4 @@ __pycache__/
 .streamlit/secrets.toml
 # Phase 0 throwaway probes and raw dumps
 phase0/
+.claude/
