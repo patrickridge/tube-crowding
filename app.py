@@ -252,7 +252,8 @@ def show_footer() -> None:
         "Crowding is shown as a percentage of an undocumented baseline TfL sets for each station, so "
         "figures compare a station with its own usual pattern, not with other stations. Typical "
         "patterns describe the past, not a prediction of today. "
-        "A learning project, not affiliated with or endorsed by TfL."
+        "A learning project, not affiliated with or endorsed by TfL. "
+        "[Source code](https://github.com/patrickridge/tube-crowding)"
     )
 
 

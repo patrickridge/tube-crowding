@@ -1,6 +1,6 @@
 # How busy is my tube station?
 
-[![CI](https://github.com/OWNER/tube-crowding/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/tube-crowding/actions/workflows/ci.yml)
+[![CI](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml/badge.svg)](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml)
 
 **Live app:** LIVE_URL
 
@@ -84,7 +84,7 @@ judgement call, not a calibrated model.
 Needs Python 3.11+.
 
 ```bash
-git clone https://github.com/OWNER/tube-crowding.git
+git clone https://github.com/patrickridge/tube-crowding.git
 cd tube-crowding
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
