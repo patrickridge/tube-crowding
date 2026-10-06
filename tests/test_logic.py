@@ -8,6 +8,7 @@ import pytest
 from tube.logic import (
     best_time,
     compare_live,
+    network_factor,
     smooth,
     time_to_slot,
     typical_at,
@@ -158,3 +159,27 @@ def test_week_grid_orders_days_and_fills_missing():
     assert list(grid) == list(DAYS)
     assert grid["MON"][0] == pytest.approx(0.2)
     assert all(math.isnan(v) for v in grid["WED"])
+
+
+# ---------- network adjustment ----------
+
+
+def test_network_factor_is_median_and_ignores_missing():
+    assert network_factor([1.0, 1.2, 1.3, None, 1.4, 5.0]) == pytest.approx(1.3)
+
+
+def test_network_factor_needs_enough_stations():
+    assert network_factor([1.2, 1.3, None, None]) is None
+    assert network_factor([]) is None
+
+
+def test_compare_live_divides_out_network_factor():
+    # Raw ratio 1.5 looks "much busier", but the whole network is running 1.5x typical.
+    result = compare_live(0.3, 0.2, network=1.5)
+    assert result.ratio == pytest.approx(1.5)
+    assert result.adjusted == pytest.approx(1.0)
+    assert result.verdict == "about as busy as usual"
+
+
+def test_compare_live_without_network_uses_raw_ratio():
+    assert compare_live(0.3, 0.2).adjusted == pytest.approx(1.5)

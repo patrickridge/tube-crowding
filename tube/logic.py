@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -91,21 +92,39 @@ BANDS = [
 ]
 
 
+# Fewer sampled stations than this and the network factor is too noisy to use.
+MIN_NETWORK_SAMPLE = 5
+
+
+def network_factor(ratios: list[float | None]) -> float | None:
+    """Median live/typical ratio across a sample of stations.
+
+    Live readings run systematically above TfL's typical profiles across the whole network
+    (median ~1.27 on the evening this was built), most likely because the profiles predate
+    current ridership. Dividing by this common factor stops every station looking "busier
+    than usual". The median keeps one station with an event from skewing it.
+    """
+    valid = [r for r in ratios if r is not None and r > 0]
+    return statistics.median(valid) if len(valid) >= MIN_NETWORK_SAMPLE else None
+
+
 @dataclass(frozen=True)
 class LiveComparison:
     live: float
     typical: float
     ratio: float | None  # live / typical; None when typical is too small to divide by
+    adjusted: float | None  # ratio / network factor; equals ratio when no factor is available
     verdict: str
 
 
-def compare_live(live: float, typical: float) -> LiveComparison:
+def compare_live(live: float, typical: float, network: float | None = None) -> LiveComparison:
     if math.isnan(typical) or typical < MIN_TYPICAL_FOR_RATIO:
         verdict = "about as busy as usual" if live < 2 * MIN_TYPICAL_FOR_RATIO else "busier than usual"
-        return LiveComparison(live, typical, None, verdict)
+        return LiveComparison(live, typical, None, None, verdict)
     ratio = live / typical
-    verdict = next((text for limit, text in BANDS if ratio < limit), "much busier than usual")
-    return LiveComparison(live, typical, ratio, verdict)
+    adjusted = ratio / network if network else ratio
+    verdict = next((text for limit, text in BANDS if adjusted < limit), "much busier than usual")
+    return LiveComparison(live, typical, ratio, adjusted, verdict)
 
 
 def typical_at(week: WeekProfile, when: datetime) -> float:
