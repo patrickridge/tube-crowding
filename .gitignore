@@ -5,3 +5,5 @@ __pycache__/
 # secrets: never commit
 .env
 .streamlit/secrets.toml
+# Phase 0 throwaway probes and raw dumps
+phase0/
