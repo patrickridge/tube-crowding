@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from tube import charts
 from tube.logic import time_to_slot
 from tube.models import slot_label
-from tube.seats import TRAINS, Link, better_earlier, journey, load_links, route, stations
+from tube.seats import (
+    DAY_TYPES,
+    TRAINS,
+    Link,
+    better_earlier,
+    for_weekday,
+    journey,
+    load_links,
+    route,
+    stations,
+)
 
 ANSWERS = {  # level -> icon, colour, headline
     "seat": (":material/event_seat:", "green", "You'll probably get a seat"),
@@ -23,6 +35,15 @@ TIP = {
     "stand": "it's less crowded, though you'll probably still stand",
 }
 DEFAULT = {"line": "Northern", "from": "Balham", "to": "Bank and Monument", "time": "08:30"}
+DAYS = list(calendar.day_abbr)  # Mon .. Sun, as used in the URL
+DAY_TYPE_NAMES = {
+    "MON": "Monday",
+    "TWT": "Tuesday to Thursday",
+    "FRI": "Friday",
+    "SAT": "Saturday",
+    "SUN": "Sunday",
+}
+LONDON = ZoneInfo("Europe/London")
 
 
 @st.cache_data(show_spinner=False)
@@ -30,11 +51,15 @@ def get_links() -> list[Link]:
     return load_links()
 
 
-def _choose(label: str, options: list[str], key: str, fallback: str, container=st) -> str:
-    """Selectbox that starts from the URL (so a journey can be bookmarked)."""
-    wanted = st.query_params.get(key, DEFAULT[key])
+def _choose(label: str, options: list[str], key: str, fallback: str, container=st, **kwargs) -> str:
+    """Selectbox that starts from the URL (so a journey can be bookmarked), else from `fallback`."""
+    wanted = st.query_params.get(key, fallback)
     start = wanted if wanted in options else fallback
-    return container.selectbox(label, options, index=options.index(start))
+    return container.selectbox(label, options, index=options.index(start), **kwargs)
+
+
+def _default(key: str, options: list[str], otherwise: str) -> str:
+    return DEFAULT[key] if DEFAULT[key] in options else otherwise
 
 
 def _time_from_url() -> datetime:
@@ -46,17 +71,33 @@ def _time_from_url() -> datetime:
 
 def page() -> None:
     st.title("Will I get a seat?")
-    st.caption("How full trains usually are on a weekday, from TfL's 2025 passenger counts.")
+    st.caption("How full trains usually are, from TfL's 2025 passenger counts.")
 
-    links = get_links()
     lines = sorted(TRAINS)
     line = _choose("Line", lines, "line", DEFAULT["line"])
-    names = stations(links, line)
+    names = stations(get_links(), line)
     left, right = st.columns(2)
-    origin = _choose("From", names, "from", names[0], left)
-    dest = _choose("To", names, "to", names[-1], right)
-    when = st.time_input("Leaving at", _time_from_url().time(), step=timedelta(minutes=15))
+    origin = _choose("From", names, "from", _default("from", names, names[0]), left)
+    dest = _choose("To", names, "to", _default("to", names, names[-1]), right)
+    left, right = st.columns(2)
+    today = DAYS[datetime.now(LONDON).weekday()]
+    day = _choose(
+        "Day",
+        DAYS,
+        "day",
+        today,
+        left,
+        format_func=lambda d: calendar.day_name[DAYS.index(d)] + (" (today)" if d == today else ""),
+    )
+    when = right.time_input("Leaving at", _time_from_url().time(), step=timedelta(minutes=15))
+    # The day isn't saved: a bookmarked journey should open on today.
     st.query_params.update({"line": line, "from": origin, "to": dest, "time": f"{when:%H:%M}"})
+    if st.button(":material/swap_horiz: Return trip"):
+        st.query_params.update({"from": dest, "to": origin})
+        st.rerun()
+
+    weekday = DAYS.index(day)
+    links = for_weekday(get_links(), weekday)
 
     if origin == dest:
         st.info("Pick two different stations.")
@@ -92,6 +133,7 @@ def page() -> None:
         charts.train_day(list(path[0].per_train), train.seats, train.capacity, slot), config=charts.CONFIG
     )
     st.caption(
-        f"People on each train leaving {origin} towards {dest} on a typical Tuesday to Thursday. "
+        f"People on each train leaving {origin} towards {dest} on a typical "
+        f"{DAY_TYPE_NAMES[DAY_TYPES[weekday]]}. "
         "Bookmark this page to come back to your journey."
     )
