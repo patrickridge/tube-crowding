@@ -1,7 +1,4 @@
-"""Plotly figure builders. No Streamlit and no network, so they can be checked in isolation.
-
-Values arrive as a fraction of the station's busiest time and are shown as percentages.
-"""
+"""Plotly charts. Values come in as a fraction of the station's busiest time."""
 
 from __future__ import annotations
 
@@ -149,7 +146,7 @@ def window_bars(slots: list[int], values: list[float], best_slot: int, latest_sl
             x=labels,
             y=_pct(values),
             marker=dict(color=colours, cornerradius=4),
-            # Label only the two bars the recommendation is about; the rest are context.
+            # Only label the recommended and latest bars.
             text=[
                 f"{v * 100:.0f}%" if s in (best_slot, latest_slot) else ""
                 for s, v in zip(slots, values, strict=True)

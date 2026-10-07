@@ -68,7 +68,7 @@ NETWORK_SAMPLE = (
 
 log = logging.getLogger(__name__)
 
-VERDICT_STYLE = {  # icon + colour + words, so meaning never relies on colour alone
+VERDICT_STYLE = {  # icon and colour, so it doesn't rely on colour alone
     "much quieter than usual": (":material/keyboard_double_arrow_down:", "green"),
     "quieter than usual": (":material/arrow_downward:", "green"),
     "about as busy as usual": (":material/drag_handle:", "gray"),
@@ -109,7 +109,7 @@ def get_live(naptan_id: str) -> LiveReading | None:
     try:
         return get_client().live(naptan_id)
     except TflError:
-        return None  # live is optional; the typical view still works without it
+        return None  # the page still works without live data
 
 
 def _station_ratio(client: TflClient, naptan_id: str) -> float | None:
@@ -353,6 +353,6 @@ def main() -> None:
 
 try:
     main()
-except Exception:  # last line of defence: log the trace, show the user a sentence
+except Exception:  # log it, and show a message instead of a traceback
     log.exception("Unhandled error")
     st.error("Something went wrong loading this page. Please refresh, or try again in a minute.")

@@ -47,8 +47,7 @@ def window_slots(start_slot: int, end_slot: int) -> list[int]:
 
 # Below this, typical crowding is near-empty and a ratio would be meaningless (0.02 vs 0.01 = "2x busier").
 MIN_TYPICAL_FOR_RATIO = 0.03
-# Ratio thresholds: a judgement call, not calibrated. Within +/-10% of typical we say "usual"
-# so ordinary day-to-day noise doesn't read as news.
+# My own thresholds, not fitted to data. Within 10% of typical counts as normal.
 BANDS = [
     (0.75, "much quieter than usual"),
     (0.9, "quieter than usual"),
@@ -64,10 +63,9 @@ MIN_NETWORK_SAMPLE = 5
 def network_factor(ratios: list[float | None]) -> float | None:
     """Median live/typical ratio across a sample of stations.
 
-    Live readings run systematically above TfL's typical profiles across the whole network
-    (median ~1.27 on the evening this was built), most likely because the profiles predate
-    current ridership. Dividing by this common factor stops every station looking "busier
-    than usual". The median keeps one station with an event from skewing it.
+    Live readings are above TfL's typical figures almost everywhere (about 1.27x when I
+    checked), so without this every station looks "busier than usual". Median rather than
+    mean so one station with an event doesn't move it much.
     """
     valid = [r for r in ratios if r is not None and r > 0]
     return statistics.median(valid) if len(valid) >= MIN_NETWORK_SAMPLE else None
@@ -110,10 +108,10 @@ def week_grid(week: WeekProfile) -> dict[str, list[float]]:
     }
 
 
-# ---------- plain-English busyness ----------
+# ---------- busyness levels ----------
 
-# Levels as a share of the station's own busiest 15 minutes of the week. TfL's baseline is
-# undocumented, so "% of this station's peak" is the most honest unit a user can read.
+# Busyness as a share of the station's busiest 15 minutes of the week. TfL's own baseline
+# isn't documented, so this is easier to understand.
 LEVELS = [(0.25, "Quiet"), (0.5, "Moderate"), (0.75, "Busy")]
 
 
@@ -168,7 +166,7 @@ def find_peak(profile: list[float], window: range) -> Peak | None:
     return Peak(top, before, after)
 
 
-# ---------- leeway: how much does leaving earlier help? ----------
+# ---------- trip planner ----------
 
 
 def departure_window(arrive_by: int, journey: int, leeway: int) -> tuple[int, int]:

@@ -61,7 +61,7 @@ def parse_day(raw: dict[str, Any]) -> DayProfile:
         except (KeyError, TypeError, ValueError):
             continue  # skip a bad band rather than lose the whole day
         # Some stations (e.g. Hammersmith H&C) send every band twice with different
-        # values; we average them rather than guess which one is right.
+        # values. I average them.
         sums[slot] += value
         counts[slot] += 1
     values = tuple(s / c if c else math.nan for s, c in zip(sums, counts, strict=True))
@@ -99,7 +99,7 @@ def parse_live(raw: Any) -> LiveReading | None:
             time_local=datetime.strptime(raw["timeLocal"], "%Y-%m-%d %H:%M:%S"),
         )
     except (KeyError, TypeError, ValueError):
-        return None  # live data is a nice-to-have; never fail the page over it
+        return None  # the page still works without live data
 
 
 # ---------- HTTP ----------
