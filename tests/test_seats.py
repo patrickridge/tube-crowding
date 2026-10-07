@@ -10,6 +10,7 @@ from tube.seats import (
     Link,
     Train,
     better_earlier,
+    for_weekday,
     journey,
     level,
     load_links,
@@ -22,7 +23,7 @@ TRAIN = Train(seats=100, capacity=500)
 
 
 def link(origin: str, dest: str, people: float = 50.0, line: str = "Test") -> Link:
-    return Link(line, origin, dest, tuple([people] * SLOTS_PER_DAY))
+    return Link("TWT", line, origin, dest, tuple([people] * SLOTS_PER_DAY))
 
 
 # A -> B -> C -> D one way, and back the other way, with a branch B -> E.
@@ -90,7 +91,7 @@ def test_better_earlier_finds_latest_improvement():
     people = [300.0] * SLOTS_PER_DAY
     people[31] = 90  # 07:45 -> maybe
     people[30] = 50  # 07:30 -> seat
-    path = [Link("Test", "A", "B", tuple(people))]
+    path = [Link("TWT", "Test", "A", "B", tuple(people))]
     assert better_earlier(path, 32, TRAIN) == (31, "maybe")
 
 
@@ -111,9 +112,16 @@ def test_every_line_has_a_train(real_links):
     assert {lk.line for lk in real_links} == set(TRAINS)
 
 
+def test_every_day_type_is_present(real_links):
+    assert {lk.day for lk in real_links} == {"MON", "TWT", "FRI", "SAT", "SUN"}
+    assert {lk.day for lk in for_weekday(real_links, 2)} == {"TWT"}  # Wednesday
+    assert {lk.day for lk in for_weekday(real_links, 6)} == {"SUN"}
+
+
 def test_balham_to_bank_goes_north_and_is_busier_than_southbound(real_links):
-    north = route(real_links, "Northern", "Balham", "Bank and Monument")
-    south = route(real_links, "Northern", "Balham", "Morden")
+    weekday = for_weekday(real_links, 1)
+    north = route(weekday, "Northern", "Balham", "Bank and Monument")
+    south = route(weekday, "Northern", "Balham", "Morden")
     assert north[0].dest == "Clapham South"
     assert south[0].dest == "Tooting Bec"
     morning = 34  # 08:30

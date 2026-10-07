@@ -1,7 +1,8 @@
 """Build data/links.csv from TfL's NUMBAT workbook: people per train on every stretch of line.
 
-Download NBT25TWT_Outputs.xlsx from https://crowding.data.tfl.gov.uk (NUMBAT/NUMBAT 2025/) into
-raw/, then run from the repo root:  python -m scripts.build_links
+Download the five NBT25*_Outputs.xlsx files (MON, TWT, FRI, SAT, SUN) from
+https://crowding.data.tfl.gov.uk (NUMBAT/NUMBAT 2025/) into raw/, then run from the repo root:
+python -m scripts.build_links
 Needs openpyxl (in requirements-dev.txt).
 """
 
@@ -13,7 +14,7 @@ from pathlib import Path
 import openpyxl
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "raw" / "NBT25TWT_Outputs.xlsx"
+DAY_TYPES = ["MON", "TWT", "FRI", "SAT", "SUN"]  # TWT = a typical Tuesday to Thursday
 OUT = ROOT / "data" / "links.csv"
 LINES = {  # NUMBAT name -> name shown in the app
     "Bakerloo": "Bakerloo",
@@ -48,8 +49,8 @@ def clean(station: str) -> str:
     return TAG.sub("", station.strip())
 
 
-def main() -> None:
-    workbook = openpyxl.load_workbook(SOURCE, read_only=True)
+def build_day(day: str) -> tuple[list[int], list[list]]:
+    workbook = openpyxl.load_workbook(ROOT / "raw" / f"NBT25{day}_Outputs.xlsx", read_only=True)
     header, loads = read_sheet(workbook, "Link_Loads")
     _, trains = read_sheet(workbook, "Link_Frequencies")
     bands = [i for i, h in enumerate(header) if isinstance(h, str) and len(h) == 9 and h[4] == "-"]
@@ -69,11 +70,18 @@ def main() -> None:
     rows = []
     for key, total in people.items():
         per_train = [round(p / t) if t else "" for p, t in zip(total, services[key], strict=True)]
-        rows.append([*key, *per_train])
+        rows.append([day, *key, *per_train])
+    return [header[i][:4] for i in bands], rows
 
+
+def main() -> None:
+    rows = []
+    for day in DAY_TYPES:
+        times, day_rows = build_day(day)
+        rows += day_rows
     with OUT.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["line", "dir", "from", "to", *[header[i][:4] for i in bands]])
+        writer.writerow(["day", "line", "dir", "from", "to", *times])
         writer.writerows(rows)
     print(f"Wrote {len(rows)} links to {OUT}")
 

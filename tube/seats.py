@@ -1,7 +1,8 @@
 """Will I get a seat? Pure functions over data/links.csv (built by scripts/build_links.py).
 
 Each link is one stretch of line in one direction, with the typical number of people on each
-train leaving that stretch's first station, per 15-minute band (TfL NUMBAT, Tue-Thu 2025).
+train leaving that stretch's first station, per 15-minute band (TfL NUMBAT 2025), for one of
+five day types: MON, TWT (Tuesday to Thursday), FRI, SAT and SUN.
 """
 
 from __future__ import annotations
@@ -39,8 +40,12 @@ TRAINS = {
 }
 
 
+DAY_TYPES = ("MON", "TWT", "TWT", "TWT", "FRI", "SAT", "SUN")  # by datetime.weekday()
+
+
 @dataclass(frozen=True)
 class Link:
+    day: str
     line: str
     origin: str
     dest: str
@@ -55,8 +60,13 @@ def load_links(path: Path = LINKS_CSV) -> list[Link]:
             for slot in range(SLOTS_PER_DAY):
                 value = row[slot_label(slot).replace(":", "")]
                 per_train[slot] = float(value) if value else math.nan
-            links.append(Link(row["line"], row["from"], row["to"], tuple(per_train)))
+            links.append(Link(row["day"], row["line"], row["from"], row["to"], tuple(per_train)))
     return links
+
+
+def for_weekday(links: list[Link], weekday: int) -> list[Link]:
+    """Links for the day type that covers a weekday (0 = Monday)."""
+    return [link for link in links if link.day == DAY_TYPES[weekday]]
 
 
 def stations(links: list[Link], line: str) -> list[str]:
