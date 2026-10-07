@@ -16,6 +16,7 @@ from tube.config import KEY_NAME, app_key_from_env
 from tube.logic import (
     EVENING,
     MORNING,
+    Option,
     busyness_level,
     compare_live,
     departure_window,
@@ -184,7 +185,9 @@ def show_live(week: WeekProfile, peak: float, reading: LiveReading | None, netwo
 
         usual = busyness_level(result.typical / peak) if peak else "Unknown"
         detail = f"Usually {usual.lower()} at {reading.time_local:%H:%M} on a {reading.time_local:%A}."
-        if result.verdict == "an unusual reading":
+        if reading.value == 0:
+            detail += " TfL's live feed shows zero here, which usually means it isn't working right now."
+        elif result.verdict == "an unusual reading":
             detail += (
                 f" The live figure is {_more_or_less(result.adjusted)} than normal, which is more "
                 "likely a data glitch than real crowds, so treat it with caution."
@@ -223,8 +226,8 @@ def show_planner(week: WeekProfile, day: str, peak: float) -> None:
     journey = right.number_input("Journey time (min)", min_value=5, max_value=180, value=30, step=5)
     leeway = st.select_slider(
         "How much earlier could you leave?",
-        options=[15, 30, 45, 60, 75, 90],
-        value=45,
+        options=[15, 30, 45, 60],
+        value=30,
         format_func=lambda m: f"{m} min",
     )
     earliest, latest = departure_window(arrive.hour * 60 + arrive.minute, int(journey), leeway)
@@ -246,19 +249,20 @@ def show_planner(week: WeekProfile, day: str, peak: float) -> None:
     last = options[-1]
 
     with st.container(border=True):
-        if best.minutes_earlier == 0:
-            st.markdown(f"#### :blue[:material/schedule:] Leave at {slot_label(best.slot)}")
-            st.markdown("Leaving at the last minute is already the quietest option in your window.")
-        else:
-            st.markdown(
-                f"#### :blue[:material/schedule:] Leave at {slot_label(best.slot)}, "
-                f"{best.minutes_earlier} min earlier"
-            )
-            st.markdown(
-                f"Typically **{-best.vs_latest:.0%} quieter** than leaving at {slot_label(last.slot)} "
-                f"({busyness_level(best.value).lower()} instead of {busyness_level(last.value).lower()})."
-            )
-        st.caption(_fare_note(day, best.slot, last.slot))
+        st.markdown(
+            f"#### :blue[:material/schedule:] Leaving at {slot_label(last.slot)}: "
+            f"{busyness_level(last.value).lower()}"
+        )
+        # Lead with the small shifts: 15 minutes is the finest step the data supports.
+        lines = [
+            f"- {o.minutes_earlier} min earlier ({slot_label(o.slot)}): {_shift(o.vs_latest)}"
+            for o in reversed(options)
+            if o.minutes_earlier in (15, 30)
+        ]
+        if best.minutes_earlier not in (0, 15, 30):
+            lines.append(f"- Quietest in your window: {slot_label(best.slot)}, {_shift(best.vs_latest)}")
+        st.markdown("\n".join(lines))
+        st.caption(_fare_note(day, options))
 
     st.plotly_chart(
         charts.window_bars([o.slot for o in options], [o.value for o in options], best.slot, last.slot),
@@ -274,8 +278,8 @@ def show_planner(week: WeekProfile, day: str, peak: float) -> None:
         }
         for o in reversed(options)
     ]
-    table = pd.DataFrame(rows)
-    st.dataframe(table, hide_index=True)
+    with st.expander("See the numbers"):
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
     if latest < earliest:
         st.caption(f"Times after midnight use {calendar.day_name[DAYS.index(next_day)]}'s pattern.")
     st.caption(
@@ -285,13 +289,21 @@ def show_planner(week: WeekProfile, day: str, peak: float) -> None:
     )
 
 
-def _fare_note(day: str, best_slot: int, latest_slot: int) -> str:
-    best_peak, latest_peak = is_peak_fare(day, best_slot), is_peak_fare(day, latest_slot)
-    if latest_peak and not best_peak:
-        return "Off-peak fare, so it's cheaper too."
-    if best_peak and not latest_peak:
-        return "Note: this is a peak-fare time; your latest option is off-peak."
-    return "Peak fare." if best_peak else "Off-peak fare."
+def _shift(change: float) -> str:
+    """Change against the latest departure in words; under 5% counts as no real difference."""
+    if abs(change) < 0.05:
+        return "about the same"
+    return f"**{abs(change):.0%} {'quieter' if change < 0 else 'busier'}**"
+
+
+def _fare_note(day: str, options: list[Option]) -> str:
+    """Fare at the latest departure, and the latest off-peak option if that's peak."""
+    if not is_peak_fare(day, options[-1].slot):
+        return "Off-peak fare."
+    off_peak = [o for o in options if not is_peak_fare(day, o.slot)]
+    if off_peak:
+        return f"Peak fare. Leaving at {slot_label(off_peak[-1].slot)} would be off-peak."
+    return "Peak fare."
 
 
 def show_footer() -> None:
