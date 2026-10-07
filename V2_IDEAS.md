@@ -1,9 +1,9 @@
-# Version 2 ideas (not built in v1)
+# Ideas for later
 
-- Log live readings over time (a small scheduled job) to calibrate the "usual" thresholds and the network factor from data.
-- Short-term forecast: model live deviation from typical using time of day, line status, weather and events.
-- Show line status/disruptions next to the live verdict (`/Line/Mode/tube/Status`) to explain unusual readings.
-- Compare mode: two stations side by side, comparing the shape of their days (absolute levels aren't comparable).
-- Journey view: combine origin and destination crowding for a whole trip.
-- Suggest an alternative for stations with no data (e.g. Monument -> Bank).
-- Extend beyond the tube if TfL publishes crowding for Elizabeth line / Overground / DLR (currently none).
+- Save live readings every few minutes to measure how noisy they are and set the "busier than usual" threshold from data.
+- Forecast the next hour from that history.
+- Journey mode: include how busy the destination is when you arrive.
+- Line status next to the live reading.
+- Compare two stations by the shape of their day (levels can't be compared).
+- Suggest a nearby station when there's no data (e.g. Monument -> Bank).
+- Handle public holidays and the evening Zone 1 off-peak rule in the fare flag.
