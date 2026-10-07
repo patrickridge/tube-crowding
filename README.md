@@ -27,6 +27,8 @@ I moved to London recently. Everyone knows the tube is busy at 8:30, but I could
 
 **Smoothing.** TfL rounds values to 0.01, which makes quiet stations look jagged. I use a 45-minute moving average (each band averaged with its neighbours). The raw values are still drawn on the chart.
 
+**Broken data.** At 17 stations, including Oxford Circus, Stratford and Baker Street, TfL's typical figures for Tuesday to Thursday drop to almost zero right at the morning or evening peak. That isn't believable, and it would make the app recommend the worst time to travel. If a band falls under 30% of the busy times either side of it, I treat that day as broken, replace it with the average of the station's other weekdays, and say so on the page. Live readings more than 2.5x or less than 0.4x normal are flagged as a likely glitch instead of being reported.
+
 **Weekday summary.** I average Monday to Friday, find the busiest band in the morning (04:00–12:00) and the evening, then find the nearest times either side where it's at least 30% quieter.
 
 **Trip planner.** Your latest departure is your arrival time minus the journey time. Each 15-minute slot between that and how early you're willing to leave gets compared with leaving at the last minute. The app recommends the quietest slot. If two slots are equally quiet, it picks the later one, so you don't leave early for nothing. Each slot is also marked peak or off-peak: TfL charges peak fares Monday to Friday, 06:30–09:30 and 16:00–19:00.
@@ -39,6 +41,7 @@ I moved to London recently. Everyone knows the tube is busy at 8:30, but I could
 - TfL measures people entering and leaving the station, not how full the trains are. It can't tell you if you'll get a seat.
 - Numbers can't be compared between stations.
 - 17 of the 270 tube stations have no data (e.g. Arsenal, Pimlico, Monument). There's no crowding data for the Elizabeth line, Overground or DLR.
+- Some stations' data is odd in ways I can't fix. Waterloo is the main one.
 - The fare flag ignores public holidays, and the rule that evening trips into Zone 1 from outside it are off-peak.
 
 ## Running it locally
