@@ -6,10 +6,7 @@ Live app: https://tube-crowding.streamlit.app
 
 Pick your line, where you're going from and to, and when you leave. The app tells you whether you'll probably get a seat, and if not, whether leaving a little earlier helps or where seats free up on the way.
 
-<p>
-  <img src="docs/screenshot-desktop.jpg" alt="Seat finder" width="560">
-  <img src="docs/screenshot-mobile.jpg" alt="Seat finder on a phone" width="240">
-</p>
+<img src="docs/screenshot.jpg" alt="Victoria line, Stockwell to Oxford Circus at 08:15: you'll probably stand, leave at 08:00 and you might get a seat" width="480">
 
 A second page shows whether a station is busier than usual right now.
 
