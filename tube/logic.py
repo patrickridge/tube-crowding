@@ -32,17 +32,6 @@ def time_to_slot(hour: int, minute: int) -> int:
     return (hour * 60 + minute) // SLOT_MINUTES
 
 
-# ---------- departure windows ----------
-
-
-def window_slots(start_slot: int, end_slot: int) -> list[int]:
-    """Departure slots from start to end inclusive. If end < start the window spans midnight,
-    and slots after midnight are numbered 96, 97, ... so they can index into the next day."""
-    if end_slot < start_slot:
-        end_slot += SLOTS_PER_DAY
-    return list(range(start_slot, end_slot + 1))
-
-
 # ---------- live vs typical ----------
 
 # Below this, typical crowding is near-empty and a ratio would be meaningless (0.02 vs 0.01 = "2x busier").
@@ -102,7 +91,7 @@ def typical_at(week: WeekProfile, when: datetime) -> float:
     return smooth(day.values)[time_to_slot(when.hour, when.minute)]
 
 
-# ---------- heatmap ----------
+# ---------- week grid ----------
 
 
 def week_grid(week: WeekProfile) -> dict[str, list[float]]:
@@ -168,60 +157,6 @@ def find_peak(profile: list[float], window: range) -> Peak | None:
     before = next((s for s in range(top - 1, window.start - 1, -1) if profile[s] <= limit), None)
     after = next((s for s in range(top + 1, window.stop) if profile[s] <= limit), None)
     return Peak(top, before, after)
-
-
-# ---------- trip planner ----------
-
-
-def departure_window(arrive_by: int, journey: int, leeway: int) -> tuple[int, int]:
-    """(earliest, latest) departure slots, from minutes after midnight.
-
-    The latest departure is rounded *down* to its 15-minute band, so it is never too late.
-    """
-    latest = (arrive_by - journey) % (24 * 60)
-    earliest = (latest - leeway) % (24 * 60)
-    return earliest // SLOT_MINUTES, latest // SLOT_MINUTES
-
-
-def is_peak_fare(day: str, slot: int) -> bool:
-    """TfL peak fares: Mon-Fri 06:30-09:30 and 16:00-19:00 (by touch-in time).
-
-    Ignores public holidays and the off-peak rule for evening journeys into Zone 1,
-    which needs the destination; the UI says so.
-    """
-    if day not in WEEKDAYS:
-        return False
-    return time_to_slot(6, 30) <= slot < time_to_slot(9, 30) or time_to_slot(16, 0) <= slot < time_to_slot(
-        19, 0
-    )
-
-
-@dataclass(frozen=True)
-class Option:
-    slot: int
-    minutes_earlier: int  # than the latest possible departure
-    value: float
-    vs_latest: float  # fractional change against the latest departure; -0.3 = 30% quieter
-
-
-def leeway_options(slots: list[int], values: list[float]) -> list[Option]:
-    """One option per departure slot, in time order; the last slot is the latest departure.
-
-    Missing bands are skipped. `vs_latest` is 0 when the latest slot is empty or unknown.
-    """
-    latest = values[-1] if values else math.nan
-    options = []
-    for i, (slot, value) in enumerate(zip(slots, values, strict=True)):
-        if math.isnan(value):
-            continue
-        change = value / latest - 1 if latest and not math.isnan(latest) else 0.0
-        options.append(Option(slot % SLOTS_PER_DAY, (len(slots) - 1 - i) * SLOT_MINUTES, value, change))
-    return options
-
-
-def quietest(options: list[Option]) -> Option | None:
-    """Least crowded option; ties go to the later departure, so nobody leaves earlier than needed."""
-    return min(options, key=lambda o: (o.value, o.minutes_earlier), default=None)
 
 
 # ---------- data repair ----------

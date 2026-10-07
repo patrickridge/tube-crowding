@@ -8,13 +8,9 @@ import pytest
 from tube.logic import (
     busyness_level,
     compare_live,
-    departure_window,
     find_peak,
     has_dropout,
-    is_peak_fare,
-    leeway_options,
     network_factor,
-    quietest,
     repair_dropouts,
     smooth,
     station_peak,
@@ -22,7 +18,6 @@ from tube.logic import (
     typical_at,
     week_grid,
     weekday_average,
-    window_slots,
 )
 from tube.models import DAYS, SLOTS_PER_DAY, DayProfile, WeekProfile
 
@@ -58,14 +53,6 @@ def test_time_to_slot():
     assert time_to_slot(0, 0) == 0
     assert time_to_slot(9, 37) == 38
     assert time_to_slot(23, 59) == 95
-
-
-# ---------- departure windows ----------
-
-
-def test_window_slots_spanning_midnight():
-    assert window_slots(94, 2) == [94, 95, 96, 97, 98]
-    assert window_slots(40, 40) == [40]
 
 
 # ---------- live vs typical ----------
@@ -211,64 +198,6 @@ def test_find_peak_no_shoulder_inside_window():
 def test_find_peak_empty_or_zero():
     assert find_peak([NAN] * SLOTS_PER_DAY, range(16, 48)) is None
     assert find_peak([0.0] * SLOTS_PER_DAY, range(16, 48)) is None
-
-
-# ---------- leeway and fares ----------
-
-
-def test_departure_window_simple():
-    # Arrive 09:00, 30 min journey, 60 min leeway -> leave 07:30 to 08:30.
-    assert departure_window(9 * 60, 30, 60) == (30, 34)
-
-
-def test_departure_window_rounds_latest_down():
-    # Latest departure 08:37 falls in the 08:30 band.
-    assert departure_window(9 * 60, 23, 0) == (34, 34)
-
-
-def test_departure_window_crosses_midnight():
-    # Arrive 00:30 after a 45-minute journey -> latest departure 23:45 the day before.
-    assert departure_window(30, 45, 30) == (93, 95)
-
-
-@pytest.mark.parametrize(
-    "day, hhmm, peak",
-    [
-        ("MON", (6, 15), False),
-        ("MON", (6, 30), True),
-        ("MON", (9, 15), True),
-        ("MON", (9, 30), False),
-        ("FRI", (16, 0), True),
-        ("FRI", (19, 0), False),
-        ("SAT", (8, 0), False),
-    ],
-)
-def test_is_peak_fare(day, hhmm, peak):
-    assert is_peak_fare(day, time_to_slot(*hhmm)) is peak
-
-
-def test_leeway_options_compare_with_latest():
-    # Leaving 07:30..08:00; the latest (08:00) is the busiest.
-    options = leeway_options([30, 31, 32], [0.2, 0.3, 0.4])
-    assert [o.minutes_earlier for o in options] == [30, 15, 0]
-    assert [o.vs_latest for o in options] == pytest.approx([-0.5, -0.25, 0.0])
-    assert quietest(options).slot == 30
-
-
-def test_quietest_tie_goes_to_later_departure():
-    options = leeway_options([30, 31, 32], [0.2, 0.2, 0.4])
-    assert quietest(options).slot == 31
-
-
-def test_leeway_options_skip_missing_and_handle_empty_latest():
-    options = leeway_options([30, 31, 32], [0.2, NAN, 0.0])
-    assert [o.slot for o in options] == [30, 32]
-    assert all(o.vs_latest == 0 for o in options)
-    assert quietest([]) is None
-
-
-def test_leeway_options_wrap_slots_after_midnight():
-    assert [o.slot for o in leeway_options([95, 96], [0.1, 0.1])] == [95, 0]
 
 
 # ---------- dropout repair ----------
