@@ -19,13 +19,22 @@ from tube import charts
 from tube.client import StationNotCovered, TflClient, TflError
 from tube.config import KEY_NAME, app_key_from_env
 from tube.logic import (
-    best_time,
+    EVENING,
+    MORNING,
+    busyness_level,
     compare_live,
+    departure_window,
+    find_peak,
+    is_peak_fare,
+    leeway_options,
     network_factor,
+    quietest,
     smooth,
+    station_peak,
     time_to_slot,
     typical_at,
     week_grid,
+    weekday_average,
     window_slots,
 )
 from tube.models import DAYS, SLOTS_PER_DAY, LiveReading, Station, WeekProfile, slot_label
@@ -147,7 +156,28 @@ def _more_or_less(ratio: float) -> str:
     return f"{abs(change):.0f}% {'busier' if change >= 0 else 'quieter'}"
 
 
-def show_live(week: WeekProfile, reading: LiveReading | None, network: float | None) -> None:
+def show_summary(week: WeekProfile, peak: float) -> None:
+    """One line per weekday peak: when it is, and when it's at least 30% quieter."""
+    profile = weekday_average(week)
+    lines = []
+    for name, window in (("Mornings", MORNING), ("Evenings", EVENING)):
+        found = find_peak(profile, window)
+        if found is None:
+            continue
+        line = f"**{name}** peak around **{slot_label(found.slot)}**"
+        escapes = []
+        if found.before is not None:
+            escapes.append(f"by {slot_label(found.before)}")
+        if found.after is not None:
+            escapes.append(f"from {slot_label(found.after)}")
+        if escapes:
+            line += f". Travel {' or '.join(escapes)} and it's 30%+ quieter."
+        lines.append(line)
+    if lines:
+        st.markdown("  \n".join(["On weekdays at this station:", *lines]))
+
+
+def show_live(week: WeekProfile, peak: float, reading: LiveReading | None, network: float | None) -> None:
     with st.container(border=True):
         if reading is None:
             st.markdown("**Live data is unavailable right now.**")
@@ -155,20 +185,19 @@ def show_live(week: WeekProfile, reading: LiveReading | None, network: float | N
             return
         result = compare_live(reading.value, typical_at(week, reading.time_local), network)
         icon, colour = VERDICT_STYLE[result.verdict]
-        st.markdown(f"#### :{colour}[{icon} {result.verdict.capitalize()}]")
+        st.markdown(f"#### :{colour}[{icon} Right now: {result.verdict}]")
 
-        at = f"{reading.time_local:%H:%M}"
-        head = f"Live {reading.value:.0%} vs typical {result.typical:.0%} of station baseline at {at}"
-        if result.ratio is None:
-            st.caption(f"{head}: too quiet at this time to compare fairly.")
-        elif network:
-            st.caption(
-                f"{head} ({result.ratio - 1:+.0%}). Across the network, stations are running "
-                f"{network - 1:+.0%} against TfL's typical figures right now; allowing for that, "
-                f"this station is {_more_or_less(result.adjusted)} than usual."
-            )
-        else:
-            st.caption(f"{head}: {_more_or_less(result.ratio)} than usual.")
+        usual = busyness_level(result.typical / peak) if peak else "Unknown"
+        detail = f"Usually {usual.lower()} at {reading.time_local:%H:%M} on a {reading.time_local:%A}."
+        if result.adjusted is not None:
+            detail += f" Live crowding is {_more_or_less(result.adjusted)} than normal for this time"
+            if network:
+                detail += (
+                    f", after allowing for the whole network running {network - 1:+.0%} "
+                    "against TfL's typical figures"
+                )
+            detail += "."
+        st.caption(detail)
 
 
 def pick_day(today: str) -> str:
@@ -181,67 +210,88 @@ def pick_day(today: str) -> str:
     )
 
 
-def show_day(week: WeekProfile, day: str, live_marker: tuple[int, float] | None) -> None:
-    profile = week.days[day]
-    fig = charts.day_profile(list(profile.values), smooth(profile.values), live_marker)
+def show_day(week: WeekProfile, day: str, peak: float, live_marker: tuple[int, float] | None) -> None:
+    raw = [v / peak for v in week.days[day].values]
+    fig = charts.day_profile(raw, smooth(raw), live_marker)
     st.plotly_chart(fig, config=charts.CONFIG)
-    if profile.am_peak and profile.pm_peak:
-        st.caption(f"TfL's peak periods for this station: {profile.am_peak} and {profile.pm_peak}.")
+    st.caption("100% is this station's busiest 15 minutes of the week.")
 
 
-def show_best_time(week: WeekProfile, day: str) -> None:
-    step = timedelta(minutes=15)
+def show_planner(week: WeekProfile, day: str, peak: float) -> None:
     left, right = st.columns(2)
-    start = left.time_input("Leaving from", time(7, 30), step=step)
-    end = right.time_input("Leaving by", time(9, 30), step=step)
-    start_slot, end_slot = time_to_slot(start.hour, start.minute), time_to_slot(end.hour, end.minute)
-
-    next_day = DAYS[(DAYS.index(day) + 1) % 7]
-    today_vals = smooth(week.days[day].values)
-    tomorrow_vals = smooth(week.days[next_day].values) if next_day in week.days else None
-    result = best_time(today_vals, start_slot, end_slot, tomorrow_vals)
-    if result is None:
-        st.info("No crowding data for that window.")
-        return
-
-    best, worst = slot_label(result.best_slot), slot_label(result.worst_slot)
-    with st.container(border=True):
-        st.markdown(f"#### :blue[:material/schedule:] Leave at {best}")
-        if result.quieter_by > 0:
-            st.markdown(
-                f"Typically **{result.quieter_by:.0%} quieter** than {worst}, the busiest time in "
-                f"your window ({result.best_value:.0%} vs {result.worst_value:.0%} of baseline)."
-            )
-        else:
-            st.markdown("Every departure in this window is typically about equally busy.")
-
-    slots = window_slots(start_slot, end_slot)
-    values = [
-        today_vals[s] if s < SLOTS_PER_DAY else (tomorrow_vals or today_vals)[s - SLOTS_PER_DAY]
-        for s in slots
-    ]
-    shown = [s % SLOTS_PER_DAY for s in slots]
-    st.plotly_chart(
-        charts.window_bars(shown, values, result.best_slot, result.worst_slot), config=charts.CONFIG
+    arrive = left.time_input("Arrive by", time(9, 0), step=timedelta(minutes=5))
+    journey = right.number_input("Journey time (min)", min_value=5, max_value=180, value=30, step=5)
+    leeway = st.select_slider(
+        "How much earlier could you leave?",
+        options=[15, 30, 45, 60, 75, 90],
+        value=45,
+        format_func=lambda m: f"{m} min",
     )
-    if end_slot < start_slot:
-        next_name = charts.DAY_NAMES[next_day]
-        st.caption(f"Your window crosses midnight: times after 00:00 use {next_name}'s pattern.")
+    earliest, latest = departure_window(arrive.hour * 60 + arrive.minute, int(journey), leeway)
 
-    with st.expander("How this is worked out"):
-        st.markdown(
-            "Each departure time is scored with TfL's typical crowding for that 15-minute band, "
-            "smoothed with a 45-minute moving average to remove rounding jitter. The recommendation "
-            "is the band with the **lowest** smoothed value in your window (ties go to the earlier "
-            "time). *Quieter by* compares it with the busiest band: (busiest − quietest) / busiest."
-        )
-        table = pd.DataFrame(
-            {
-                "Departure": [slot_label(s) for s in shown],
-                "% of baseline": [round(v * 100, 1) for v in values],
-            }
-        )
-        st.dataframe(table, hide_index=True)
+    # Departures after midnight belong to the next day's profile.
+    next_day = DAYS[(DAYS.index(day) + 1) % 7]
+    today_vals = [v / peak for v in smooth(week.days[day].values)]
+    next_vals = today_vals
+    if next_day in week.days:
+        next_vals = [v / peak for v in smooth(week.days[next_day].values)]
+    slots = window_slots(earliest, latest)
+    values = [today_vals[s] if s < SLOTS_PER_DAY else next_vals[s - SLOTS_PER_DAY] for s in slots]
+
+    options = leeway_options(slots, values)
+    best = quietest(options)
+    if best is None:
+        st.info("No crowding data for that time.")
+        return
+    last = options[-1]
+
+    with st.container(border=True):
+        if best.minutes_earlier == 0:
+            st.markdown(f"#### :blue[:material/schedule:] Leave at {slot_label(best.slot)}")
+            st.markdown("Leaving at the last minute is already the quietest option in your window.")
+        else:
+            st.markdown(
+                f"#### :blue[:material/schedule:] Leave at {slot_label(best.slot)}, "
+                f"{best.minutes_earlier} min earlier"
+            )
+            st.markdown(
+                f"Typically **{-best.vs_latest:.0%} quieter** than leaving at {slot_label(last.slot)} "
+                f"({busyness_level(best.value).lower()} instead of {busyness_level(last.value).lower()})."
+            )
+        st.caption(_fare_note(day, best.slot, last.slot))
+
+    st.plotly_chart(
+        charts.window_bars([o.slot for o in options], [o.value for o in options], best.slot, last.slot),
+        config=charts.CONFIG,
+    )
+    rows = [
+        {
+            "Leave": slot_label(o.slot),
+            "Earlier by": f"{o.minutes_earlier} min" if o.minutes_earlier else "latest",
+            "Busyness": f"{busyness_level(o.value)} ({o.value:.0%})",
+            "vs latest": f"{o.vs_latest:+.0%}" if o.minutes_earlier else "",
+            "Fare": "Peak" if is_peak_fare(day, o.slot) else "Off-peak",
+        }
+        for o in reversed(options)
+    ]
+    table = pd.DataFrame(rows)
+    st.dataframe(table, hide_index=True)
+    if latest < earliest:
+        st.caption(f"Times after midnight use {calendar.day_name[DAYS.index(next_day)]}'s pattern.")
+    st.caption(
+        "Times are when you enter the station, in 15-minute steps. Peak fares apply Mon–Fri "
+        "06:30–09:30 and 16:00–19:00, except public holidays and evening trips from outside "
+        "Zone 1 into Zone 1."
+    )
+
+
+def _fare_note(day: str, best_slot: int, latest_slot: int) -> str:
+    best_peak, latest_peak = is_peak_fare(day, best_slot), is_peak_fare(day, latest_slot)
+    if latest_peak and not best_peak:
+        return "Off-peak fare, so it's cheaper too."
+    if best_peak and not latest_peak:
+        return "Note: this is a peak-fare time; your latest option is off-peak."
+    return "Peak fare." if best_peak else "Off-peak fare."
 
 
 def show_footer() -> None:
@@ -249,9 +299,8 @@ def show_footer() -> None:
     st.caption(
         "Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016 and "
         "Geomni UK Map data © and database rights [2019]. "
-        "Crowding is shown as a percentage of an undocumented baseline TfL sets for each station, so "
-        "figures compare a station with its own usual pattern, not with other stations. Typical "
-        "patterns describe the past, not a prediction of today. "
+        "Busyness is relative to each station's own busiest time, so it can't be compared between "
+        "stations. Typical patterns describe the past, not a prediction of today. "
         "A learning project, not affiliated with or endorsed by TfL. "
         "[Source code](https://github.com/patrickridge/tube-crowding)"
     )
@@ -277,24 +326,27 @@ def main() -> None:
         show_footer()
         return
 
-    now = datetime.now(LONDON)
-    today = DAYS[now.weekday()]
+    peak = station_peak(week)
+    show_summary(week, peak)
     reading = get_live(station.naptan_id)
-    show_live(week, reading, get_network_factor() if reading else None)
+    show_live(week, peak, reading, get_network_factor() if reading else None)
 
+    today = DAYS[datetime.now(LONDON).weekday()]
     day = pick_day(today)
     live_marker = None
     if reading is not None and day == DAYS[reading.time_local.weekday()]:
-        live_marker = (time_to_slot(reading.time_local.hour, reading.time_local.minute), reading.value)
+        slot = time_to_slot(reading.time_local.hour, reading.time_local.minute)
+        live_marker = (slot, reading.value / peak)
 
-    tab_day, tab_best, tab_week = st.tabs(["Through the day", "Best time to travel", "Whole week"])
+    tab_plan, tab_day, tab_week = st.tabs(["Plan my trip", "Through the day", "Whole week"])
+    with tab_plan:
+        show_planner(week, day, peak)
     with tab_day:
-        show_day(week, day, live_marker)
-    with tab_best:
-        show_best_time(week, day)
+        show_day(week, day, peak, live_marker)
     with tab_week:
-        st.plotly_chart(charts.week_heatmap(week_grid(week)), config=charts.CONFIG)
-        st.caption("Darker means busier. Each cell is a 15-minute band, smoothed.")
+        grid = {d: [v / peak for v in values] for d, values in week_grid(week).items()}
+        st.plotly_chart(charts.week_heatmap(grid), config=charts.CONFIG)
+        st.caption("Darker is busier. 100% is this station's busiest 15 minutes of the week.")
 
     show_footer()
 
