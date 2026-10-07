@@ -17,6 +17,8 @@ It uses TfL's open crowding data.
   <img src="docs/screenshot-mobile.jpg" alt="Trip planner on a phone" width="240">
 </p>
 
+**[What's wrong with TfL's crowding data](docs/DATA_QUALITY.md)**: two problems I found while building this, and what the app does about them.
+
 ## Why
 
 I moved to London recently. Everyone knows the tube is busy at 8:30, but I couldn't find out how much quieter it gets if I leave a bit earlier, or whether it's worth it at my station. TfL publishes the data needed to answer that, so I built this.
@@ -82,7 +84,7 @@ tests/              pytest
 
 ## What I'd do next
 
-1. Save the live readings every few minutes, to see how noisy they really are and set the "busier than usual" threshold from data.
+1. A job already saves live readings for 30 stations every 15 minutes (on the `data` branch). With a few weeks of that I can set the "busier than usual" threshold from data.
 2. Use that history to forecast the next hour, e.g. "likely to get busier than usual by 08:15".
 3. Add both ends of a journey, so the planner also considers how busy your destination is when you arrive.
 4. Show line status next to the live reading, to explain unusual numbers.
