@@ -7,7 +7,7 @@ import statistics
 from dataclasses import dataclass
 from datetime import datetime
 
-from tube.models import DAYS, SLOT_MINUTES, SLOTS_PER_DAY, WeekProfile
+from tube.models import DAYS, SLOT_MINUTES, SLOTS_PER_DAY, DayProfile, WeekProfile
 
 SMOOTHING_WINDOW = 3  # bands, i.e. a 45-minute centred moving average
 
@@ -56,6 +56,8 @@ BANDS = [
 ]
 
 
+# Live readings further than this from normal are more likely a data glitch than real crowds.
+PLAUSIBLE_LIVE = (0.4, 2.5)
 # Fewer sampled stations than this and the network factor is too noisy to use.
 MIN_NETWORK_SAMPLE = 5
 
@@ -86,6 +88,8 @@ def compare_live(live: float, typical: float, network: float | None = None) -> L
         return LiveComparison(live, typical, None, None, verdict)
     ratio = live / typical
     adjusted = ratio / network if network else ratio
+    if not PLAUSIBLE_LIVE[0] <= adjusted <= PLAUSIBLE_LIVE[1]:
+        return LiveComparison(live, typical, ratio, adjusted, "an unusual reading")
     verdict = next((text for limit, text in BANDS if adjusted < limit), "much busier than usual")
     return LiveComparison(live, typical, ratio, adjusted, verdict)
 
@@ -218,3 +222,44 @@ def leeway_options(slots: list[int], values: list[float]) -> list[Option]:
 def quietest(options: list[Option]) -> Option | None:
     """Least crowded option; ties go to the later departure, so nobody leaves earlier than needed."""
     return min(options, key=lambda o: (o.value, o.minutes_earlier), default=None)
+
+
+# ---------- data repair ----------
+
+# Some stations' typical profiles collapse to near zero at peak times on Tue-Thu (e.g. Waterloo
+# at 09:00), which isn't believable. A band counts as a dropout if both sides, within two hours,
+# are busy (at least half the day's peak) and the band is under 30% of the quieter side.
+DROPOUT_RATIO = 0.3
+DROPOUT_REACH = 8  # bands either side (two hours)
+
+
+def has_dropout(values: tuple[float, ...] | list[float]) -> bool:
+    v = [0.0 if math.isnan(x) else x for x in smooth(values)]
+    day_max = max(v, default=0.0)
+    if day_max <= 0:
+        return False
+    for s in range(time_to_slot(6, 0), time_to_slot(20, 0)):
+        side = min(max(v[s - DROPOUT_REACH : s]), max(v[s + 1 : s + 1 + DROPOUT_REACH]))
+        if side >= 0.5 * day_max and v[s] < DROPOUT_RATIO * side:
+            return True
+    return False
+
+
+def repair_dropouts(week: WeekProfile) -> tuple[WeekProfile, list[str]]:
+    """Replace weekdays that have a dropout with the average of the station's clean weekdays.
+
+    Returns the repaired week and the days that were replaced (empty if none, or if no
+    clean weekday is available to copy from).
+    """
+    bad = [d for d in WEEKDAYS if d in week.days and has_dropout(week.days[d].values)]
+    clean = [week.days[d] for d in WEEKDAYS if d in week.days and d not in bad]
+    if not bad or not clean:
+        return week, []
+    average = []
+    for slot in range(SLOTS_PER_DAY):
+        vals = [d.values[slot] for d in clean if not math.isnan(d.values[slot])]
+        average.append(sum(vals) / len(vals) if vals else math.nan)
+    days = dict(week.days)
+    for d in bad:
+        days[d] = DayProfile(d, tuple(average), week.days[d].am_peak, week.days[d].pm_peak)
+    return WeekProfile(week.naptan_id, days), bad

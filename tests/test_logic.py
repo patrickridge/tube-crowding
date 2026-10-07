@@ -10,10 +10,12 @@ from tube.logic import (
     compare_live,
     departure_window,
     find_peak,
+    has_dropout,
     is_peak_fare,
     leeway_options,
     network_factor,
     quietest,
+    repair_dropouts,
     smooth,
     station_peak,
     time_to_slot,
@@ -77,6 +79,8 @@ def test_window_slots_spanning_midnight():
         (0.20, 0.20, "about as busy as usual"),  # 1.0
         (0.23, 0.20, "busier than usual"),  # 1.15
         (0.30, 0.20, "much busier than usual"),  # 1.5
+        (0.06, 0.20, "an unusual reading"),  # 0.3, more likely a glitch
+        (0.60, 0.20, "an unusual reading"),  # 3.0
     ],
 )
 def test_compare_live_verdicts(live, typical, verdict):
@@ -265,3 +269,39 @@ def test_leeway_options_skip_missing_and_handle_empty_latest():
 
 def test_leeway_options_wrap_slots_after_midnight():
     assert [o.slot for o in leeway_options([95, 96], [0.1, 0.1])] == [95, 0]
+
+
+# ---------- dropout repair ----------
+
+
+def commuter_day(dip: bool = False) -> list[float]:
+    """Quiet night, 0.3 from 07:00 to 19:00; optionally a collapse to 0.01 around 09:00."""
+    day = [0.02] * SLOTS_PER_DAY
+    for s in range(time_to_slot(7, 0), time_to_slot(19, 0)):
+        day[s] = 0.3
+    if dip:
+        for s in range(time_to_slot(8, 45), time_to_slot(9, 30)):
+            day[s] = 0.01
+    return day
+
+
+def test_has_dropout():
+    assert has_dropout(commuter_day(dip=True))
+    assert not has_dropout(commuter_day())
+    assert not has_dropout([0.0] * SLOTS_PER_DAY)
+
+
+def test_repair_replaces_bad_weekdays_with_clean_average():
+    days = {d: commuter_day() for d in ["MON", "FRI"]}
+    days["MON"] = [v * 2 for v in days["MON"]]  # MON 0.6, FRI 0.3 -> average 0.45
+    days["WED"] = commuter_day(dip=True)
+    repaired, bad = repair_dropouts(make_week(days))
+    assert bad == ["WED"]
+    assert repaired.days["WED"].values[time_to_slot(9, 0)] == pytest.approx(0.45)
+    assert repaired.days["MON"].values == make_week(days).days["MON"].values
+
+
+def test_repair_needs_a_clean_weekday():
+    week = make_week({"TUE": commuter_day(dip=True)})
+    repaired, bad = repair_dropouts(week)
+    assert bad == [] and repaired is week
