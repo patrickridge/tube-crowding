@@ -1,50 +1,50 @@
-# How busy is my tube station?
+# Will I get a seat?
 
 [![CI](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml/badge.svg)](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml)
 
 Live app: https://tube-crowding.streamlit.app
 
-A small web app for London commuters. Pick a station and it tells you:
-
-- when it's usually busiest on weekdays, and how early or late you'd need to travel to avoid the worst of it
-- whether it's busier or quieter than normal right now
-- if you have to arrive by a certain time, whether leaving 15, 30 or 45 minutes earlier is actually worth it, and whether it changes your fare
-
-It uses TfL's open crowding data.
+Pick your line, where you're going from and to, and when you leave. The app tells you whether you'll probably get a seat, and if not, whether leaving a little earlier helps or where seats free up on the way.
 
 <p>
-  <img src="docs/screenshot-desktop.jpg" alt="Station view for King's Cross" width="560">
-  <img src="docs/screenshot-mobile.jpg" alt="Trip planner on a phone" width="240">
+  <img src="docs/screenshot-desktop.jpg" alt="Seat finder" width="560">
+  <img src="docs/screenshot-mobile.jpg" alt="Seat finder on a phone" width="240">
 </p>
 
-**[What's wrong with TfL's crowding data](docs/DATA_QUALITY.md)**: two problems I found while building this, and what the app does about them.
+A second page shows whether a station is busier than usual right now.
 
 ## Why
 
-I moved to London recently. Everyone knows the tube is busy at 8:30, but I couldn't find out how much quieter it gets if I leave a bit earlier, or whether it's worth it at my station. TfL publishes the data needed to answer that, so I built this.
+Everyone knows the tube is busy at 8:30. What I actually wanted to know when I moved to London was whether I'd get a seat, and whether it was worth leaving 15 minutes earlier for one. TfL publishes enough data to answer that, but not in a form anyone would read before their commute.
 
 ## How it works
 
-**Data.** `GET /crowding/{station}` gives typical crowding for each day of the week in 15-minute bands. `GET /crowding/{station}/Live` gives the latest reading. Both are a fraction of a baseline that TfL sets per station but doesn't document. Because of that, I show everything as a percentage of the station's own busiest 15 minutes of the week, and never compare one station with another. More detail on the API, and what I found while exploring it, is in [docs/DATA_NOTES.md](docs/DATA_NOTES.md).
+**Data.** TfL's NUMBAT dataset (2025) estimates, for a typical Tuesday to Thursday, how many people travel on every stretch of line in each 15-minute band, and how many trains run. Dividing one by the other gives the average number of people on each train. `scripts/build_links.py` turns TfL's spreadsheet into `data/links.csv`, which the app ships with, so the seat finder needs no API calls.
 
-**Smoothing.** TfL rounds values to 0.01, which makes quiet stations look jagged. I use a 45-minute moving average (each band averaged with its neighbours). The raw values are still drawn on the chart.
+**Your journey.** Each line is a set of one-way links between stations. A breadth-first search finds the path from your station to your destination, which also works out the direction for you.
 
-**Broken data.** At 17 stations, including Oxford Circus, Stratford and Baker Street, TfL's typical figures for Tuesday to Thursday drop to almost zero right at the morning or evening peak. That isn't believable, and it would make the app recommend the worst time to travel. If a band falls under 30% of the busy times either side of it, I treat that day as broken, replace it with the average of the station's other weekdays, and say so on the page. Live readings more than 2.5x or less than 0.4x normal are flagged as a likely glitch instead of being reported.
+**Seat or not.** I compare people on the train as it leaves your station with the train's seats and total capacity (from TfL's rolling stock information sheets):
 
-**Weekday summary.** I average Monday to Friday, find the busiest band in the morning (04:00–12:00) and the evening, then find the nearest times either side where it's at least 30% quieter.
+| Average people per train | Answer |
+|---|---|
+| under 80% of seats | You'll probably get a seat |
+| 80–110% of seats | You might get a seat |
+| over 110% of seats | You'll probably stand |
+| over 90% of total capacity | Very crowded |
 
-**Trip planner.** Your latest departure is your arrival time minus the journey time. Each 15-minute slot between that and how early you're willing to leave gets compared with leaving at the last minute. The app recommends the quietest slot. If two slots are equally quiet, it picks the later one, so you don't leave early for nothing. Each slot is also marked peak or off-peak: TfL charges peak fares Monday to Friday, 06:30–09:30 and 16:00–19:00.
+These cut-offs are my own judgement. The figures are averages over the whole train, and the ends of a train are usually emptier than the middle, so "probably a seat" needs some slack.
 
-**Live vs usual.** I compare the live reading with the typical value for the same 15-minute band. While building this I noticed that live readings were above typical at almost every station. On the first evening, the median across 42 stations was 1.27x, so on the raw numbers everywhere looked "busier than usual". To correct for that, the app checks 16 big stations, takes the median live/typical ratio, and divides it out. A station is only called busier than usual if it's busier than the rest of the network right now. Anything within 10% counts as normal. That threshold is my own choice, not something fitted to data.
+**Tips.** If leaving 15 or 30 minutes earlier gives a better answer, the app says so. Otherwise, if you'll stand at first, it tells you the first station after which a seat is likely.
+
+**Station page.** This uses TfL's live crowding API, compared with the station's usual pattern. More on that, and on problems I found in TfL's data, in [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md).
 
 ## Limitations
 
-- Typical patterns are averages from the past. They don't know about strikes, events or the weather.
-- TfL measures people entering and leaving the station, not how full the trains are. It can't tell you if you'll get a seat.
-- Numbers can't be compared between stations.
-- 17 of the 270 tube stations have no data (e.g. Arsenal, Pimlico, Monument). There's no crowding data for the Elizabeth line, Overground or DLR.
-- Some stations' data is odd in ways I can't fix. Waterloo is the main one.
-- The fare flag ignores public holidays, and the rule that evening trips into Zone 1 from outside it are off-peak.
+- Typical days only. It doesn't know about strikes, delays or events.
+- Averages over the whole train. Some carriages will be fuller than others.
+- The same 15-minute band is used for the whole trip.
+- Underground and Elizabeth line only, Tuesday to Thursday. Metropolitan line fast trains aren't included.
+- Piccadilly line figures assume the old trains; the new ones have a different layout.
 
 ## Running it locally
 
@@ -55,11 +55,9 @@ git clone https://github.com/patrickridge/tube-crowding.git
 cd tube-crowding
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env    # optional: add a free key from api-portal.tfl.gov.uk
+cp .env.example .env    # optional: a free key from api-portal.tfl.gov.uk, for the station page
 streamlit run app.py
 ```
-
-It works without a key, but TfL's anonymous rate limit is low.
 
 ## Tests
 
@@ -68,27 +66,30 @@ pytest
 ruff check .
 ```
 
-The tests don't touch the network. The API client is tested against real responses saved in `tests/fixtures/`, including the awkward ones (unknown station, all-zero data, duplicated bands). GitHub Actions runs the tests and the linter on every push.
+The tests don't touch the network. GitHub Actions runs them and the linter on every push.
 
 ## Code layout
 
 ```
-app.py              Streamlit page
-tube/client.py      TfL API calls, and parsing the JSON into the types in models.py
-tube/models.py      Station, DayProfile, WeekProfile, LiveReading
-tube/logic.py       Smoothing, peaks, trip planner, live vs usual (no Streamlit, no network)
-tube/charts.py      Plotly charts
-tube/stations.py    Loads data/stations.csv (rebuilt by scripts/build_stations.py)
-tests/              pytest
+app.py                  Entry point
+tube/ui.py              Navigation and footer
+tube/seat_page.py       "Will I get a seat?" page
+tube/seats.py           Routes, seat levels, tips (no Streamlit)
+tube/station_page.py    "Is my station busy?" page
+tube/client.py          TfL API client
+tube/logic.py           Smoothing, live vs usual, data repair (no Streamlit)
+tube/charts.py          Plotly charts
+scripts/                Building the data files, the data quality charts, the live logger
+tests/                  pytest
 ```
 
 ## What I'd do next
 
-1. A job already saves live readings for 30 stations every 15 minutes (on the `data` branch). With a few weeks of that I can set the "busier than usual" threshold from data.
-2. Use that history to forecast the next hour, e.g. "likely to get busier than usual by 08:15".
-3. Add both ends of a journey, so the planner also considers how busy your destination is when you arrive.
-4. Show line status next to the live reading, to explain unusual numbers.
+1. Monday, Friday and weekends (TfL publishes those too), plus the Overground and DLR.
+2. A rent vs commute tab: what a cheaper flat further out really costs once you add fares and travel time.
+3. A morning alert for your saved journey when the line is disrupted.
+4. Use the live readings the logger is collecting to check how far typical days are from real ones.
 
 ## Data and licence
 
-Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights [2019]. Used under TfL's [transport data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Data comes only from the official API. This is a personal learning project and isn't affiliated with TfL.
+Powered by TfL Open Data. Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights [2019]. Used under TfL's [transport data terms](https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service). Train capacities from TfL's rolling stock information sheets. A personal learning project, not affiliated with TfL.
