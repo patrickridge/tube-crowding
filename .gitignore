@@ -8,3 +8,5 @@ __pycache__/
 # Phase 0 throwaway probes and raw dumps
 phase0/
 .claude/
+# large source downloads
+raw/
