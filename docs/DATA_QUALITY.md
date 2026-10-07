@@ -20,7 +20,7 @@ What I do: if a band in the day falls below 30% of the busy times within two hou
 
 Each bar counts stations by how their live reading compares with TfL's typical figure for the same 15 minutes. If the two were on the same footing, this would be centred on 1. It isn't. On Tuesday evening at 22:00 the median was 1.27. On Wednesday at 18:51 it was 1.13, and the middle half of stations were between 0.94 and 1.31.
 
-So live readings run above typical across the board, by an amount that changes through the day. If you compare a station's live reading with its typical figure directly, nearly everywhere looks "busier than usual".
+So live readings run above typical across the board, by an amount that changes through the day. If you compare a station's live reading with its typical figure directly, most stations look "busier than usual".
 
 What I do: the app checks 16 big stations, takes the median live/typical ratio, and divides each station's ratio by it. "Busier than usual" then means busier than the rest of the network is right now.
 
