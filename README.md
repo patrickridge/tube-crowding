@@ -19,7 +19,7 @@ Everyone knows the tube is busy at 8:30. What I actually wanted to know when I m
 
 ## How it works
 
-**Data.** TfL's NUMBAT dataset (2025) estimates, for a typical Tuesday to Thursday, how many people travel on every stretch of line in each 15-minute band, and how many trains run. Dividing one by the other gives the average number of people on each train. `scripts/build_links.py` turns TfL's spreadsheet into `data/links.csv`, which the app ships with, so the seat finder needs no API calls.
+**Data.** TfL's NUMBAT dataset (2025) estimates, for a typical Monday, Tuesday to Thursday, Friday, Saturday and Sunday, how many people travel on every stretch of line in each 15-minute band, and how many trains run. Dividing one by the other gives the average number of people on each train. `scripts/build_links.py` turns TfL's spreadsheet into `data/links.csv`, which the app ships with, so the seat finder needs no API calls.
 
 **Your journey.** Each line is a set of one-way links between stations. A breadth-first search finds the path from your station to your destination, which also works out the direction for you.
 
@@ -43,7 +43,7 @@ These cut-offs are my own judgement. The figures are averages over the whole tra
 - Typical days only. It doesn't know about strikes, delays or events.
 - Averages over the whole train. Some carriages will be fuller than others.
 - The same 15-minute band is used for the whole trip.
-- Underground and Elizabeth line only, Tuesday to Thursday. Metropolitan line fast trains aren't included.
+- Underground and Elizabeth line only. Metropolitan line fast trains aren't included.
 - Piccadilly line figures assume the old trains; the new ones have a different layout.
 
 ## Running it locally
@@ -85,7 +85,7 @@ tests/                  pytest
 
 ## What I'd do next
 
-1. Monday, Friday and weekends (TfL publishes those too), plus the Overground and DLR.
+1. The Overground and DLR (TfL publishes them in the same data).
 2. A rent vs commute tab: what a cheaper flat further out really costs once you add fares and travel time.
 3. A morning alert for your saved journey when the line is disrupted.
 4. Use the live readings the logger is collecting to check how far typical days are from real ones.
