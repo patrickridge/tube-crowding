@@ -42,8 +42,8 @@ TAG = re.compile(r" \((Edgware|High Barnet|Bank|Charing Cross|Bak|DIS|H&C)\)$")
 
 
 def clean(station: str) -> str:
-    """'Balham LU' -> 'Balham', 'Kennington (Bank)' -> 'Kennington'."""
-    for suffix in (" LU", " EL", " NR", " LO"):
+    """'Balham LU' -> 'Balham', 'Paddington TfL' -> 'Paddington', 'Kennington (Bank)' -> 'Kennington'."""
+    for suffix in (" LU", " EL", " NR", " LO", " TfL"):
         station = station.removesuffix(suffix)
     return TAG.sub("", station.strip())
 
