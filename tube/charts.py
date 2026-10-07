@@ -1,6 +1,6 @@
 """Plotly figure builders. No Streamlit and no network, so they can be checked in isolation.
 
-Values arrive as baseline fractions and are shown as percentages.
+Values arrive as a fraction of the station's busiest time and are shown as percentages.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ GRID = "#e1e0d9"
 # Single-hue sequential ramp (light = quiet, dark = busy) for the heatmap.
 BLUE_RAMP = ["#eef4fc", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 
-Y_TITLE = "% of station baseline"
+Y_TITLE = "% of busiest time"
 DAY_NAMES = dict(zip(DAYS, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], strict=True))
 CONFIG = {"displayModeBar": False, "responsive": True}
 
@@ -140,9 +140,9 @@ def week_heatmap(grid: dict[str, list[float]]) -> go.Figure:
     return fig
 
 
-def window_bars(slots: list[int], values: list[float], best_slot: int, worst_slot: int) -> go.Figure:
-    """Each departure slot in the chosen window; quietest in blue, busiest in orange."""
-    colours = [BLUE if s == best_slot else ORANGE if s == worst_slot else GREY for s in slots]
+def window_bars(slots: list[int], values: list[float], best_slot: int, latest_slot: int) -> go.Figure:
+    """Each departure slot in the window; the recommended one in blue, the latest in orange."""
+    colours = [BLUE if s == best_slot else ORANGE if s == latest_slot else GREY for s in slots]
     labels = [slot_label(s) for s in slots]
     fig = go.Figure(
         go.Bar(
@@ -151,7 +151,7 @@ def window_bars(slots: list[int], values: list[float], best_slot: int, worst_slo
             marker=dict(color=colours, cornerradius=4),
             # Label only the two bars the recommendation is about; the rest are context.
             text=[
-                f"{v * 100:.0f}%" if s in (best_slot, worst_slot) else ""
+                f"{v * 100:.0f}%" if s in (best_slot, latest_slot) else ""
                 for s, v in zip(slots, values, strict=True)
             ],
             textposition="outside",

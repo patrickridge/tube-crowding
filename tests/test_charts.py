@@ -21,6 +21,6 @@ def test_week_heatmap_handles_missing_day():
     assert list(fig.data[0].y) == ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def test_window_bars_labels_only_best_and_worst():
-    fig = charts.window_bars([30, 31, 32], [0.3, 0.1, 0.5], best_slot=31, worst_slot=32)
+def test_window_bars_labels_only_best_and_latest():
+    fig = charts.window_bars([30, 31, 32], [0.3, 0.1, 0.5], best_slot=31, latest_slot=32)
     assert list(fig.data[0].text) == ["", "10%", "50%"]
