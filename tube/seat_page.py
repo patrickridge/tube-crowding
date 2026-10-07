@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -34,7 +34,7 @@ TIP = {
     "maybe": "you might get a seat",
     "stand": "it's less crowded, though you'll probably still stand",
 }
-DEFAULT = {"line": "Northern", "from": "Balham", "to": "Bank and Monument", "time": "08:30"}
+DEFAULT = {"line": "Northern", "from": "Balham", "to": "Bank and Monument"}
 DAYS = list(calendar.day_abbr)  # Mon .. Sun, as used in the URL
 DAY_TYPE_NAMES = {
     "MON": "Monday",
@@ -62,11 +62,13 @@ def _default(key: str, options: list[str], otherwise: str) -> str:
     return DEFAULT[key] if DEFAULT[key] in options else otherwise
 
 
-def _time_from_url() -> datetime:
+def _start_time() -> time:
+    """The time saved in the URL (a bookmarked journey), else now, rounded down to 15 minutes."""
     try:
-        return datetime.strptime(st.query_params.get("time", DEFAULT["time"]), "%H:%M")
-    except ValueError:
-        return datetime.strptime(DEFAULT["time"], "%H:%M")
+        return datetime.strptime(st.query_params["time"], "%H:%M").time()
+    except (KeyError, ValueError):
+        now = datetime.now(LONDON)
+        return time(now.hour, now.minute - now.minute % 15)
 
 
 def page() -> None:
@@ -89,7 +91,7 @@ def page() -> None:
         left,
         format_func=lambda d: calendar.day_name[DAYS.index(d)] + (" (today)" if d == today else ""),
     )
-    when = right.time_input("Leaving at", _time_from_url().time(), step=timedelta(minutes=15))
+    when = right.time_input("Leaving at", _start_time(), step=timedelta(minutes=15))
     # The day isn't saved: a bookmarked journey should open on today.
     st.query_params.update({"line": line, "from": origin, "to": dest, "time": f"{when:%H:%M}"})
     if st.button(":material/swap_horiz: Return trip"):
