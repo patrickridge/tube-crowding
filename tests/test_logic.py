@@ -7,12 +7,18 @@ import pytest
 
 from tube.logic import (
     best_time,
+    busyness_level,
     compare_live,
+    departure_window,
+    find_peak,
+    is_peak_fare,
     network_factor,
     smooth,
+    station_peak,
     time_to_slot,
     typical_at,
     week_grid,
+    weekday_average,
     window_slots,
 )
 from tube.models import DAYS, SLOTS_PER_DAY, DayProfile, WeekProfile
@@ -183,3 +189,100 @@ def test_compare_live_divides_out_network_factor():
 
 def test_compare_live_without_network_uses_raw_ratio():
     assert compare_live(0.3, 0.2).adjusted == pytest.approx(1.5)
+
+
+# ---------- busyness levels ----------
+
+
+@pytest.mark.parametrize(
+    "share, level",
+    [
+        (0.0, "Quiet"),
+        (0.249, "Quiet"),
+        (0.25, "Moderate"),
+        (0.5, "Busy"),
+        (0.75, "Very busy"),
+        (1.2, "Very busy"),
+    ],
+)
+def test_busyness_level_bands(share, level):
+    assert busyness_level(share) == level
+
+
+def test_busyness_level_unknown():
+    assert busyness_level(NAN) == "Unknown"
+
+
+def test_station_peak_is_max_of_smoothed_week():
+    mon = flat_day(0.1)
+    mon[40] = 0.4  # smoothed -> (0.1 + 0.4 + 0.1) / 3 = 0.2
+    assert station_peak(make_week({"MON": mon})) == pytest.approx(0.2)
+
+
+def test_station_peak_empty_week():
+    assert station_peak(make_week({})) == 0.0
+
+
+# ---------- commute summary ----------
+
+
+def test_weekday_average_ignores_weekend():
+    week = make_week({"MON": flat_day(0.2), "TUE": flat_day(0.4), "SAT": flat_day(0.9)})
+    assert weekday_average(week)[0] == pytest.approx(0.3)
+
+
+def test_find_peak_and_shoulders():
+    profile = [0.0] * SLOTS_PER_DAY
+    # 07:00 .. 10:00 ramp: 0.2, 0.5, 0.8, 1.0 (08:00), 0.8, 0.6, 0.3
+    for slot, v in zip(range(28, 35), [0.2, 0.5, 0.8, 1.0, 0.8, 0.6, 0.3], strict=True):
+        profile[slot] = v
+    peak = find_peak(profile, range(16, 48))
+    assert peak.slot == 31  # 07:45
+    assert peak.before == 29  # 0.5 <= 0.7
+    assert peak.after == 33  # 0.6 <= 0.7
+
+
+def test_find_peak_no_shoulder_inside_window():
+    profile = [1.6] * SLOTS_PER_DAY  # 1.6 > 0.7 * 2.0, so nothing is 30% quieter
+    profile[20] = 2.0
+    peak = find_peak(profile, range(16, 48))
+    assert (peak.slot, peak.before, peak.after) == (20, None, None)
+
+
+def test_find_peak_empty_or_zero():
+    assert find_peak([NAN] * SLOTS_PER_DAY, range(16, 48)) is None
+    assert find_peak([0.0] * SLOTS_PER_DAY, range(16, 48)) is None
+
+
+# ---------- leeway and fares ----------
+
+
+def test_departure_window_simple():
+    # Arrive 09:00, 30 min journey, 60 min leeway -> leave 07:30 to 08:30.
+    assert departure_window(9 * 60, 30, 60) == (30, 34)
+
+
+def test_departure_window_rounds_latest_down():
+    # Latest departure 08:37 falls in the 08:30 band.
+    assert departure_window(9 * 60, 23, 0) == (34, 34)
+
+
+def test_departure_window_crosses_midnight():
+    # Arrive 00:30 after a 45-minute journey -> latest departure 23:45 the day before.
+    assert departure_window(30, 45, 30) == (93, 95)
+
+
+@pytest.mark.parametrize(
+    "day, hhmm, peak",
+    [
+        ("MON", (6, 15), False),
+        ("MON", (6, 30), True),
+        ("MON", (9, 15), True),
+        ("MON", (9, 30), False),
+        ("FRI", (16, 0), True),
+        ("FRI", (19, 0), False),
+        ("SAT", (8, 0), False),
+    ],
+)
+def test_is_peak_fare(day, hhmm, peak):
+    assert is_peak_fare(day, time_to_slot(*hhmm)) is peak

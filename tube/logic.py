@@ -143,3 +143,87 @@ def week_grid(week: WeekProfile) -> dict[str, list[float]]:
     return {
         day: smooth(week.days[day].values) if day in week.days else [math.nan] * SLOTS_PER_DAY for day in DAYS
     }
+
+
+# ---------- plain-English busyness ----------
+
+# Levels as a share of the station's own busiest 15 minutes of the week. TfL's baseline is
+# undocumented, so "% of this station's peak" is the most honest unit a user can read.
+LEVELS = [(0.25, "Quiet"), (0.5, "Moderate"), (0.75, "Busy")]
+
+
+def station_peak(week: WeekProfile) -> float:
+    """Highest smoothed value in the week; the 100% mark for this station."""
+    peaks = [v for values in week_grid(week).values() for v in values if not math.isnan(v)]
+    return max(peaks, default=0.0)
+
+
+def busyness_level(share_of_peak: float) -> str:
+    if math.isnan(share_of_peak):
+        return "Unknown"
+    return next((name for limit, name in LEVELS if share_of_peak < limit), "Very busy")
+
+
+# ---------- commute summary ----------
+
+SHOULDER = 0.7  # "at least 30% quieter than the peak"
+MORNING = range(time_to_slot(4, 0), time_to_slot(12, 0))
+EVENING = range(time_to_slot(12, 0), SLOTS_PER_DAY)
+WEEKDAYS = DAYS[:5]
+
+
+@dataclass(frozen=True)
+class Peak:
+    slot: int
+    before: int | None  # last slot before the peak at or below SHOULDER x peak
+    after: int | None  # first slot after the peak at or below SHOULDER x peak
+
+
+def weekday_average(week: WeekProfile) -> list[float]:
+    """Mean smoothed weekday profile, ignoring missing bands."""
+    grid = week_grid(week)
+    out = []
+    for slot in range(SLOTS_PER_DAY):
+        vals = [grid[d][slot] for d in WEEKDAYS if not math.isnan(grid[d][slot])]
+        out.append(sum(vals) / len(vals) if vals else math.nan)
+    return out
+
+
+def find_peak(profile: list[float], window: range) -> Peak | None:
+    """Busiest slot in `window`, plus the nearest times either side that are 30%+ quieter."""
+    valid = [s for s in window if not math.isnan(profile[s])]
+    if not valid:
+        return None
+    top = max(valid, key=lambda s: profile[s])  # ties go to the earliest slot
+    if profile[top] <= 0:
+        return None
+    limit = SHOULDER * profile[top]
+    before = next((s for s in range(top - 1, window.start - 1, -1) if profile[s] <= limit), None)
+    after = next((s for s in range(top + 1, window.stop) if profile[s] <= limit), None)
+    return Peak(top, before, after)
+
+
+# ---------- leeway: how much does leaving earlier help? ----------
+
+
+def departure_window(arrive_by: int, journey: int, leeway: int) -> tuple[int, int]:
+    """(earliest, latest) departure slots, from minutes after midnight.
+
+    The latest departure is rounded *down* to its 15-minute band, so it is never too late.
+    """
+    latest = (arrive_by - journey) % (24 * 60)
+    earliest = (latest - leeway) % (24 * 60)
+    return earliest // SLOT_MINUTES, latest // SLOT_MINUTES
+
+
+def is_peak_fare(day: str, slot: int) -> bool:
+    """TfL peak fares: Mon-Fri 06:30-09:30 and 16:00-19:00 (by touch-in time).
+
+    Ignores public holidays and the off-peak rule for evening journeys into Zone 1,
+    which needs the destination; the UI says so.
+    """
+    if day not in WEEKDAYS:
+        return False
+    return time_to_slot(6, 30) <= slot < time_to_slot(9, 30) or time_to_slot(16, 0) <= slot < time_to_slot(
+        19, 0
+    )
