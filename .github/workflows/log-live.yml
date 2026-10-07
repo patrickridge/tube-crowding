@@ -1,0 +1,39 @@
+name: Log live crowding
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # GitHub may run scheduled jobs a few minutes late
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: log-live
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data-branch
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m scripts.log_live data-branch/live
+        env:
+          TFL_APP_KEY: ${{ secrets.TFL_APP_KEY }}
+      - name: Commit to the data branch
+        working-directory: data-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add live
+          git commit -m "Live readings $(date -u +%Y-%m-%dT%H:%MZ)" || exit 0
+          git push
