@@ -6,13 +6,14 @@ from datetime import datetime
 import pytest
 
 from tube.logic import (
-    best_time,
     busyness_level,
     compare_live,
     departure_window,
     find_peak,
     is_peak_fare,
+    leeway_options,
     network_factor,
+    quietest,
     smooth,
     station_peak,
     time_to_slot,
@@ -57,58 +58,12 @@ def test_time_to_slot():
     assert time_to_slot(23, 59) == 95
 
 
-# ---------- best time ----------
+# ---------- departure windows ----------
 
 
-def test_best_time_picks_minimum_in_window():
-    day = flat_day(0.5)
-    day[30], day[31], day[32] = 0.4, 0.1, 0.3  # 07:30, 07:45, 08:00
-    day[36] = 0.8  # 09:00
-    result = best_time(day, 30, 38)  # 07:30 to 09:30
-    assert (result.best_slot, result.best_value) == (31, 0.1)
-    assert (result.worst_slot, result.worst_value) == (36, 0.8)
-    assert result.quieter_by == pytest.approx(0.875)  # (0.8 - 0.1) / 0.8
-
-
-def test_best_time_ignores_values_outside_window():
-    day = flat_day(0.5)
-    day[10] = 0.0
-    assert best_time(day, 30, 38).best_value == 0.5
-
-
-def test_best_time_ties_go_to_earliest():
-    result = best_time(flat_day(0.2), 30, 38)
-    assert result.best_slot == 30 and result.worst_slot == 30
-    assert result.quieter_by == 0
-
-
-def test_best_time_window_spanning_midnight_uses_next_day():
-    today, tomorrow = flat_day(0.5), flat_day(0.5)
-    today[1] = 0.0  # 00:15 *today* must be ignored...
-    tomorrow[1] = 0.05  # ...in favour of 00:15 *tomorrow*
+def test_window_slots_spanning_midnight():
     assert window_slots(94, 2) == [94, 95, 96, 97, 98]
-    result = best_time(today, 94, 2, tomorrow=tomorrow)  # 23:30 to 00:30
-    assert (result.best_slot, result.best_value) == (1, 0.05)
-
-
-def test_best_time_single_slot_window():
-    result = best_time(flat_day(0.3), 40, 40)
-    assert result.best_slot == result.worst_slot == 40
-
-
-def test_best_time_no_data_returns_none():
-    assert best_time([NAN] * SLOTS_PER_DAY, 30, 38) is None
-
-
-def test_best_time_skips_missing_bands():
-    day = flat_day(0.5)
-    day[31] = NAN
-    day[32] = 0.2
-    assert best_time(day, 30, 33).best_slot == 32
-
-
-def test_quieter_by_is_zero_when_window_is_empty_station():
-    assert best_time(flat_day(0.0), 30, 38).quieter_by == 0
+    assert window_slots(40, 40) == [40]
 
 
 # ---------- live vs typical ----------
@@ -286,3 +241,27 @@ def test_departure_window_crosses_midnight():
 )
 def test_is_peak_fare(day, hhmm, peak):
     assert is_peak_fare(day, time_to_slot(*hhmm)) is peak
+
+
+def test_leeway_options_compare_with_latest():
+    # Leaving 07:30..08:00; the latest (08:00) is the busiest.
+    options = leeway_options([30, 31, 32], [0.2, 0.3, 0.4])
+    assert [o.minutes_earlier for o in options] == [30, 15, 0]
+    assert [o.vs_latest for o in options] == pytest.approx([-0.5, -0.25, 0.0])
+    assert quietest(options).slot == 30
+
+
+def test_quietest_tie_goes_to_later_departure():
+    options = leeway_options([30, 31, 32], [0.2, 0.2, 0.4])
+    assert quietest(options).slot == 31
+
+
+def test_leeway_options_skip_missing_and_handle_empty_latest():
+    options = leeway_options([30, 31, 32], [0.2, NAN, 0.0])
+    assert [o.slot for o in options] == [30, 32]
+    assert all(o.vs_latest == 0 for o in options)
+    assert quietest([]) is None
+
+
+def test_leeway_options_wrap_slots_after_midnight():
+    assert [o.slot for o in leeway_options([95, 96], [0.1, 0.1])] == [95, 0]

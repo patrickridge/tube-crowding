@@ -32,20 +32,7 @@ def time_to_slot(hour: int, minute: int) -> int:
     return (hour * 60 + minute) // SLOT_MINUTES
 
 
-# ---------- best time to travel ----------
-
-
-@dataclass(frozen=True)
-class BestTime:
-    best_slot: int
-    best_value: float
-    worst_slot: int
-    worst_value: float
-
-    @property
-    def quieter_by(self) -> float:
-        """How much quieter the best slot is than the worst, as a fraction of the worst."""
-        return 0.0 if self.worst_value <= 0 else (self.worst_value - self.best_value) / self.worst_value
+# ---------- departure windows ----------
 
 
 def window_slots(start_slot: int, end_slot: int) -> list[int]:
@@ -54,28 +41,6 @@ def window_slots(start_slot: int, end_slot: int) -> list[int]:
     if end_slot < start_slot:
         end_slot += SLOTS_PER_DAY
     return list(range(start_slot, end_slot + 1))
-
-
-def best_time(
-    today: list[float], start_slot: int, end_slot: int, tomorrow: list[float] | None = None
-) -> BestTime | None:
-    """Least and most crowded departure slots in a window, using the (smoothed) profile.
-
-    Metric: the minimum of the profile over the window. Ties go to the earliest slot,
-    since leaving earlier is the safer recommendation. Returns None if there's no data.
-    """
-    tomorrow = tomorrow if tomorrow is not None else today
-    candidates = []
-    for slot in window_slots(start_slot, end_slot):
-        value = today[slot] if slot < SLOTS_PER_DAY else tomorrow[slot - SLOTS_PER_DAY]
-        if not math.isnan(value):
-            candidates.append((slot, value))
-    if not candidates:
-        return None
-    # min/max return the first of equal values, and candidates are in time order.
-    best = min(candidates, key=lambda c: c[1])
-    worst = max(candidates, key=lambda c: c[1])
-    return BestTime(best[0] % SLOTS_PER_DAY, best[1], worst[0] % SLOTS_PER_DAY, worst[1])
 
 
 # ---------- live vs typical ----------
@@ -227,3 +192,31 @@ def is_peak_fare(day: str, slot: int) -> bool:
     return time_to_slot(6, 30) <= slot < time_to_slot(9, 30) or time_to_slot(16, 0) <= slot < time_to_slot(
         19, 0
     )
+
+
+@dataclass(frozen=True)
+class Option:
+    slot: int
+    minutes_earlier: int  # than the latest possible departure
+    value: float
+    vs_latest: float  # fractional change against the latest departure; -0.3 = 30% quieter
+
+
+def leeway_options(slots: list[int], values: list[float]) -> list[Option]:
+    """One option per departure slot, in time order; the last slot is the latest departure.
+
+    Missing bands are skipped. `vs_latest` is 0 when the latest slot is empty or unknown.
+    """
+    latest = values[-1] if values else math.nan
+    options = []
+    for i, (slot, value) in enumerate(zip(slots, values, strict=True)):
+        if math.isnan(value):
+            continue
+        change = value / latest - 1 if latest and not math.isnan(latest) else 0.0
+        options.append(Option(slot % SLOTS_PER_DAY, (len(slots) - 1 - i) * SLOT_MINUTES, value, change))
+    return options
+
+
+def quietest(options: list[Option]) -> Option | None:
+    """Least crowded option; ties go to the later departure, so nobody leaves earlier than needed."""
+    return min(options, key=lambda o: (o.value, o.minutes_earlier), default=None)
