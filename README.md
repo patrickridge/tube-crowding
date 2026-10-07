@@ -19,7 +19,7 @@ Everyone knows the tube is busy at 8:30. What I actually wanted to know when I m
 
 ## How it works
 
-**Data.** TfL's NUMBAT dataset (2025) estimates, for a typical Monday, Tuesday to Thursday, Friday, Saturday and Sunday, how many people travel on every stretch of line in each 15-minute band, and how many trains run. Dividing one by the other gives the average number of people on each train. `scripts/build_links.py` turns TfL's spreadsheet into `data/links.csv`, which the app ships with, so the seat finder needs no API calls.
+**Data.** TfL's NUMBAT dataset (2025) estimates, for a typical Monday, Tuesday to Thursday, Friday, Saturday and Sunday, how many people travel on every stretch of line in each 15-minute band, and how many trains run. Dividing one by the other gives the average number of people on each train. `scripts/build_links.py` turns TfL's spreadsheets into `data/links.csv`, which the app ships with, so the seat finder needs no API calls.
 
 **Your journey.** Each line is a set of one-way links between stations. A breadth-first search finds the path from your station to your destination, which also works out the direction for you.
 
