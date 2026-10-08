@@ -10,7 +10,7 @@ Oxford Circus on a Monday looks like you'd expect: busy in the morning, busier i
 
 It isn't just one station. Across the network, 17 stations have the same thing in their published typical profiles, nearly always on Tuesday, Wednesday and Thursday, around 09:00 and 18:30. Mondays and Fridays look fine. My guess is that something went wrong when TfL built the midweek profiles, but I can't confirm that from the outside.
 
-Why it matters: the app's trip planner recommends the quietest time to leave. With this data it would tell you to leave Oxford Circus at 09:15 on a Wednesday.
+Why it matters: the station page summarises when each station is quietest. With this data it would say Oxford Circus is quiet at 09:15 on a Wednesday.
 
 What I do: if a band in the day falls below 30% of the busy times within two hours either side of it, I treat the whole day as broken. I replace it with the average of the station's other weekdays, and say so on the page. Waterloo is odd even after this, because its Monday has a smaller version of the same dip, so the page warns about it.
 
