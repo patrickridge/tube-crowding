@@ -4,7 +4,11 @@ primaryColor = "#2a78d6"
 backgroundColor = "#fcfcfb"
 secondaryBackgroundColor = "#f1f0ec"
 textColor = "#0b0b0b"
-font = "sans serif"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "0.6rem"
+borderColor = "#e4e2dc"
+showWidgetBorder = false
 
 [client]
 # Never show tracebacks to users; errors are logged server-side instead.
