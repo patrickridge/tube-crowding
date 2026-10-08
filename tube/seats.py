@@ -8,8 +8,8 @@ five day types: MON, TWT (Tuesday to Thursday), FRI, SAT and SUN.
 from __future__ import annotations
 
 import csv
+import heapq
 import math
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,31 +69,79 @@ def for_weekday(links: list[Link], weekday: int) -> list[Link]:
     return [link for link in links if link.day == DAY_TYPES[weekday]]
 
 
-def stations(links: list[Link], line: str) -> list[str]:
-    return sorted({name for link in links if link.line == line for name in (link.origin, link.dest)})
+def stations(links: list[Link]) -> list[str]:
+    return sorted({name for link in links for name in (link.origin, link.dest)})
 
 
-def route(links: list[Link], line: str, origin: str, dest: str) -> list[Link] | None:
-    """Fewest-stops path from origin to dest on one line (breadth-first search)."""
+# ---------- planning a journey ----------
+
+CHANGE_COST = 4  # a change "costs" as much as 4 stops, so routes don't swap lines to save one
+MINUTES_PER_STOP = 2  # rough, only used to pick the 15-minute band for later legs
+MINUTES_PER_CHANGE = 5
+
+
+@dataclass(frozen=True)
+class Leg:
+    line: str
+    links: tuple[Link, ...]
+    minutes_in: int  # rough minutes from setting off to boarding this leg
+
+    @property
+    def origin(self) -> str:
+        return self.links[0].origin
+
+    @property
+    def dest(self) -> str:
+        return self.links[-1].dest
+
+
+def plan(links: list[Link], origin: str, dest: str) -> list[Leg] | None:
+    """Cheapest route from origin to dest, split into one leg per line.
+
+    Dijkstra's algorithm over (station, line) pairs: each stop costs 1 and each change of
+    line costs CHANGE_COST. Stations with the same name on different lines are treated as
+    the same place, so changing there is allowed.
+    """
     outgoing: dict[str, list[Link]] = {}
     for link in links:
-        if link.line == line:
-            outgoing.setdefault(link.origin, []).append(link)
-    came_by: dict[str, Link | None] = {origin: None}
-    queue = deque([origin])
+        outgoing.setdefault(link.origin, []).append(link)
+
+    start = (origin, "")
+    best = {start: 0}
+    came_by: dict[tuple[str, str], tuple[tuple[str, str], Link]] = {}
+    queue = [(0, origin, "")]
     while queue:
-        here = queue.popleft()
+        cost, here, line = heapq.heappop(queue)
         if here == dest:
             path = []
-            while came_by[here] is not None:
-                path.append(came_by[here])
-                here = came_by[here].origin
-            return path[::-1]
+            state = (here, line)
+            while state != start:
+                state, link = came_by[state]
+                path.append(link)
+            return _legs(path[::-1])
+        if cost > best[(here, line)]:
+            continue  # already reached this state more cheaply
         for link in outgoing.get(here, []):
-            if link.dest not in came_by:
-                came_by[link.dest] = link
-                queue.append(link.dest)
+            step = 1 + (CHANGE_COST if line and link.line != line else 0)
+            state = (link.dest, link.line)
+            if cost + step < best.get(state, math.inf):
+                best[state] = cost + step
+                came_by[state] = ((here, line), link)
+                heapq.heappush(queue, (cost + step, link.dest, link.line))
     return None
+
+
+def _legs(path: list[Link]) -> list[Leg]:
+    legs: list[Leg] = []
+    minutes = 0
+    for link in path:
+        if legs and legs[-1].line == link.line:
+            legs[-1] = Leg(link.line, (*legs[-1].links, link), legs[-1].minutes_in)
+        else:
+            if legs:
+                minutes += MINUTES_PER_STOP * len(legs[-1].links) + MINUTES_PER_CHANGE
+            legs.append(Leg(link.line, (link,), minutes))
+    return legs
 
 
 # ---------- how full is the train? ----------
@@ -152,3 +200,21 @@ def better_earlier(path: list[Link], slot: int, train: Train, steps: int = 2) ->
         if option is not None and LEVELS.index(option) < LEVELS.index(now):
             return earlier, option
     return None
+
+
+def leg_slot(slot: int, leg: Leg) -> int:
+    """The 15-minute band you're likely to board this leg in, if you set off in `slot`."""
+    return (slot + leg.minutes_in // 15) % SLOTS_PER_DAY
+
+
+def overall(levels: list[str | None]) -> str | None:
+    """One answer for the whole trip: the shared level, 'part' if you'd sit for only some
+    of it, otherwise the worst leg."""
+    known = [lv for lv in levels if lv is not None]
+    if not known:
+        return None
+    if len(set(known)) == 1:
+        return known[0]
+    if "seat" in known or "maybe" in known:
+        return "part"
+    return max(known, key=LEVELS.index)

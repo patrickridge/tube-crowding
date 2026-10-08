@@ -12,9 +12,11 @@ from tube.seats import (
     better_earlier,
     for_weekday,
     journey,
+    leg_slot,
     level,
     load_links,
-    route,
+    overall,
+    plan,
     stations,
 )
 
@@ -38,22 +40,68 @@ LINE = [
 ]
 
 
-def test_route_follows_direction():
-    path = route(LINE, "Test", "A", "D")
-    assert [(lk.origin, lk.dest) for lk in path] == [("A", "B"), ("B", "C"), ("C", "D")]
-    back = route(LINE, "Test", "D", "A")
-    assert [lk.origin for lk in back] == ["D", "C", "B"]
+def stops(legs):
+    return [[(lk.origin, lk.dest) for lk in leg.links] for leg in legs]
 
 
-def test_route_takes_branch_and_handles_missing():
-    assert [lk.dest for lk in route(LINE, "Test", "A", "E")] == ["B", "E"]
-    assert route(LINE, "Test", "E", "A") is None  # no link out of E
-    assert route(LINE, "Other", "A", "B") is None
-    assert route(LINE, "Test", "A", "A") == []
+def test_plan_follows_direction():
+    assert stops(plan(LINE, "A", "D")) == [[("A", "B"), ("B", "C"), ("C", "D")]]
+    assert [lk.origin for lk in plan(LINE, "D", "A")[0].links] == ["D", "C", "B"]
+
+
+def test_plan_takes_branch_and_handles_missing():
+    assert stops(plan(LINE, "A", "E")) == [[("A", "B"), ("B", "E")]]
+    assert plan(LINE, "E", "A") is None  # no link out of E
+    assert plan(LINE, "A", "Z") is None
+    assert plan(LINE, "A", "A") == []
+
+
+# Line X: P -> Q -> R -> S. Line Y: Q -> T.
+NETWORK = [
+    link("P", "Q", line="X"),
+    link("Q", "R", line="X"),
+    link("R", "S", line="X"),
+    link("Q", "T", line="Y"),
+]
+
+
+def test_plan_changes_line_and_splits_into_legs():
+    legs = plan(NETWORK, "P", "T")
+    assert [(leg.line, leg.origin, leg.dest) for leg in legs] == [("X", "P", "Q"), ("Y", "Q", "T")]
+    assert legs[1].minutes_in == 2 + 5  # one stop, then a change
+
+
+def test_plan_prefers_staying_on_a_line_over_saving_a_stop():
+    # Via a change: P -X- Q -Y- R costs 1 + 1 + 4 = 6. Staying on X: P -> Q -> R costs 2.
+    network = [*NETWORK, link("Q", "R", line="Y")]
+    assert [leg.line for leg in plan(network, "P", "R")] == ["X"]
+
+
+def test_leg_slot_moves_to_later_band():
+    legs = plan(NETWORK, "P", "T")
+    assert leg_slot(32, legs[0]) == 32
+    assert leg_slot(32, legs[1]) == 32  # 7 minutes in: still the same band
+    assert leg_slot(95, legs[0]) == 95
+
+
+@pytest.mark.parametrize(
+    "levels, expected",
+    [
+        (["seat", "seat"], "seat"),
+        (["stand"], "stand"),
+        (["stand", "seat"], "part"),
+        (["maybe", "packed"], "part"),
+        (["stand", "packed"], "packed"),
+        ([None, "stand"], "stand"),
+        ([None], None),
+    ],
+)
+def test_overall(levels, expected):
+    assert overall(levels) == expected
 
 
 def test_stations_are_sorted_and_unique():
-    assert stations(LINE, "Test") == ["A", "B", "C", "D", "E"]
+    assert stations(LINE) == ["A", "B", "C", "D", "E"]
 
 
 @pytest.mark.parametrize(
@@ -120,9 +168,17 @@ def test_every_day_type_is_present(real_links):
 
 def test_balham_to_bank_goes_north_and_is_busier_than_southbound(real_links):
     weekday = for_weekday(real_links, 1)
-    north = route(weekday, "Northern", "Balham", "Bank and Monument")
-    south = route(weekday, "Northern", "Balham", "Morden")
+    north = plan(weekday, "Balham", "Bank and Monument")[0].links
+    south = plan(weekday, "Balham", "Morden")[0].links
     assert north[0].dest == "Clapham South"
     assert south[0].dest == "Tooting Bec"
     morning = 34  # 08:30
     assert north[0].per_train[morning] > 2 * south[0].per_train[morning]
+
+
+def test_balham_to_oxford_circus_changes_at_stockwell(real_links):
+    legs = plan(for_weekday(real_links, 1), "Balham", "Oxford Circus")
+    assert [(leg.line, leg.dest) for leg in legs] == [
+        ("Northern", "Stockwell"),
+        ("Victoria", "Oxford Circus"),
+    ]
