@@ -46,7 +46,9 @@ def clean(station: str) -> str:
     """'Balham LU' -> 'Balham', 'Paddington TfL' -> 'Paddington', 'Kennington (Bank)' -> 'Kennington'."""
     for suffix in (" LU", " EL", " NR", " LO", " TfL"):
         station = station.removesuffix(suffix)
-    return TAG.sub("", station.strip())
+    station = TAG.sub("", station.strip())
+    # The Elizabeth line and Piccadilly line spell this station differently.
+    return "Heathrow Terminals 2 & 3" if station == "Heathrow Terminals 123" else station
 
 
 def build_day(day: str) -> tuple[list[int], list[list]]:
