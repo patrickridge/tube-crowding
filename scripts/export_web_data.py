@@ -1,4 +1,4 @@
-"""Write the network data used by the Next.js version of the app (will-i-get-a-seat).
+"""Write the network data used by the Next.js version of the app (london-commute).
 
 Writes stations.json and one links-<DAY>.json per day type, so a page only downloads the day it
 needs. Run from the repo root:  python -m scripts.export_web_data PATH/TO/public/data
@@ -29,6 +29,7 @@ def main(out_dir: Path) -> None:
         ]
         (out_dir / f"links-{day}.json").write_text(json.dumps(rows, separators=(",", ":")))
     print(f"Wrote {len(stations)} stations and {len(links)} links to {out_dir}")
+
 
 if __name__ == "__main__":
     main(Path(sys.argv[1]))
