@@ -16,6 +16,7 @@ from tube.seats import (
     level,
     load_links,
     overall,
+    people_at,
     plan,
     stations,
 )
@@ -75,6 +76,30 @@ def test_plan_prefers_staying_on_a_line_over_saving_a_stop():
     # Via a change: P -X- Q -Y- R costs 1 + 1 + 4 = 6. Staying on X: P -> Q -> R costs 2.
     network = [*NETWORK, link("Q", "R", line="Y")]
     assert [leg.line for leg in plan(network, "P", "R")] == ["X"]
+
+
+def test_plan_skips_lines_with_no_trains_at_that_time():
+    closed = Link("TWT", "Shuttle", "P", "R", tuple([NAN] * SLOTS_PER_DAY))
+    network = [*NETWORK, closed]
+    assert [leg.line for leg in plan(network, "P", "R")] == ["Shuttle"]  # one stop, any time
+    assert [leg.line for leg in plan(network, "P", "R", slot=70)] == ["X"]  # shuttle not running
+
+
+def test_people_at_uses_next_train_when_band_is_empty():
+    people = [NAN] * SLOTS_PER_DAY
+    people[33], people[31] = 120.0, 80.0  # half-hourly trains: 08:15 and 07:45
+    lk = Link("TWT", "Test", "A", "B", tuple(people))
+    assert people_at(lk, 33) == 120  # a train in this band
+    assert people_at(lk, 32) == 120  # none at 08:00: wait for 08:15
+    assert people_at(lk, 30) == 80  # none at 07:30: wait for 07:45
+    assert math.isnan(people_at(lk, 40))
+
+
+def test_plan_still_routes_through_half_hourly_lines():
+    people = [NAN] * SLOTS_PER_DAY
+    people[33] = 100.0
+    network = [Link("TWT", "Slow", "P", "Q", tuple(people))]
+    assert [leg.line for leg in plan(network, "P", "Q", slot=32)] == ["Slow"]
 
 
 def test_leg_slot_moves_to_later_band():

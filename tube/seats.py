@@ -52,6 +52,16 @@ class Link:
     per_train: tuple[float, ...]  # indexed by slot from 00:00; NaN when no trains run
 
 
+def people_at(link: Link, slot: int) -> float:
+    """People per train in this band. Some lines only run every 30 minutes, leaving empty bands,
+    so if there's no train in this band, use the next one (you'd wait for it), then the one before."""
+    for band in (slot, slot + 1, slot - 1):
+        value = link.per_train[band % SLOTS_PER_DAY]
+        if not math.isnan(value):
+            return value
+    return math.nan
+
+
 def load_links(path: Path = LINKS_CSV) -> list[Link]:
     links = []
     with path.open(newline="") as f:
@@ -95,8 +105,11 @@ class Leg:
         return self.links[-1].dest
 
 
-def plan(links: list[Link], origin: str, dest: str) -> list[Leg] | None:
+def plan(links: list[Link], origin: str, dest: str, slot: int | None = None) -> list[Leg] | None:
     """Cheapest route from origin to dest, split into one leg per line.
+
+    If `slot` is given, stretches with no trains in that 15-minute band are left out, so the
+    route never uses a line that isn't running (the Waterloo & City at weekends, for example).
 
     Dijkstra's algorithm over (station, line) pairs: each stop costs 1 and each change of
     line costs CHANGE_COST. Stations with the same name on different lines are treated as
@@ -104,7 +117,8 @@ def plan(links: list[Link], origin: str, dest: str) -> list[Leg] | None:
     """
     outgoing: dict[str, list[Link]] = {}
     for link in links:
-        outgoing.setdefault(link.origin, []).append(link)
+        if slot is None or not math.isnan(people_at(link, slot)):
+            outgoing.setdefault(link.origin, []).append(link)
 
     start = (origin, "")
     best = {start: 0}
@@ -179,19 +193,19 @@ def journey(path: list[Link], slot: int, train: Train) -> Journey:
 
     Uses the same 15-minute band for the whole trip, which is close enough for most journeys.
     """
-    people = path[0].per_train[slot]
+    people = people_at(path[0], slot)
     board = level(people, train)
     seat_from = None
     if board not in ("seat", None):
         seat_from = next(
-            (link.origin for link in path[1:] if level(link.per_train[slot], train) == "seat"), None
+            (link.origin for link in path[1:] if level(people_at(link, slot), train) == "seat"), None
         )
     return Journey(people, board, seat_from)
 
 
 def better_earlier(path: list[Link], slot: int, train: Train, steps: int = 2) -> tuple[int, str] | None:
     """The latest earlier band (up to `steps` x 15 min) where boarding is a better level."""
-    now = level(path[0].per_train[slot], train)
+    now = level(people_at(path[0], slot), train)
     if now in ("seat", None):
         return None
     for back in range(1, steps + 1):
