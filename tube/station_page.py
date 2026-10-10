@@ -11,7 +11,6 @@ import streamlit as st
 
 from tube import charts
 from tube.client import StationNotCovered, TflClient, TflError
-from tube.config import KEY_NAME, app_key_from_env
 from tube.logic import (
     EVENING,
     MORNING,
@@ -28,6 +27,7 @@ from tube.logic import (
 )
 from tube.models import DAYS, LiveReading, Station, WeekProfile, slot_label
 from tube.stations import load_stations
+from tube.tfl import app_key, get_client
 
 # Streamlit Cloud runs on UTC; every "now" in this app must be London time.
 LONDON = ZoneInfo("Europe/London")
@@ -68,20 +68,6 @@ VERDICT_STYLE = {  # icon and colour, so it doesn't rely on colour alone
 # ---------- cached data access ----------
 
 
-def _app_key() -> str | None:
-    try:
-        if KEY_NAME in st.secrets:  # Streamlit Cloud
-            return st.secrets[KEY_NAME]
-    except FileNotFoundError:  # no secrets.toml locally; fall through to .env
-        pass
-    return app_key_from_env()
-
-
-@st.cache_resource
-def get_client() -> TflClient:
-    return TflClient(app_key=_app_key())
-
-
 @st.cache_data(show_spinner=False)
 def get_stations() -> list[Station]:
     return load_stations()
@@ -113,7 +99,7 @@ def _station_ratio(client: TflClient, naptan_id: str) -> float | None:
 @st.cache_data(ttl=NETWORK_TTL, show_spinner=False)
 def get_network_factor() -> float | None:
     """Median live/typical ratio over NETWORK_SAMPLE, fetched in parallel (about 1 second)."""
-    key = _app_key()
+    key = app_key()
     # One client per task: requests.Session isn't guaranteed to be thread-safe.
     with ThreadPoolExecutor(max_workers=8) as pool:
         ratios = list(pool.map(lambda n: _station_ratio(TflClient(key), n), NETWORK_SAMPLE))
