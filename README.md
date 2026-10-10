@@ -8,7 +8,7 @@ Pick where you're going from and to, and when you leave. The app works out your 
 
 <img src="docs/screenshot.jpg" alt="Brixton to Canary Wharf at 08:15: a seat on the Victoria line, standing on the Jubilee line" width="480">
 
-A second page shows whether a station is busier than usual right now.
+It also compares the tube with cycling: a Santander Cycle (using live bike and space counts at the docks near each station) and your own bike. A second page shows whether a station is busier than usual right now.
 
 ## Why
 
@@ -33,6 +33,8 @@ These cut-offs are my own judgement. The figures are averages over the whole tra
 
 **Tips.** If leaving 15 or 30 minutes earlier gives a better answer for your first train, the app says so. Otherwise, if you'll stand at first, it tells you the station where a seat usually becomes likely.
 
+**Bike instead?** TfL's BikePoint API gives live counts of bikes, e-bikes and free spaces at all ~800 Santander Cycles docks. The app finds docks within a 6-minute walk (500 m) of each station, picks the nearest one with a bike and the nearest with a free space, and adds up walk + ride + walk. Riding time assumes 15 km/h on a hire bike (18 km/h on your own) along roads about 30% longer than a straight line. Tube time comes from TfL's Journey Planner. Dock counts are live, so they only tell you about right now, not about a time later in the day.
+
 **Station page.** This uses TfL's live crowding API, compared with the station's usual pattern. More on that, and on problems I found in TfL's data, in [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md).
 
 ## Limitations
@@ -42,6 +44,7 @@ These cut-offs are my own judgement. The figures are averages over the whole tra
 - Journey times are rough (2 minutes per stop, 5 per change), only used to pick the 15-minute band for later legs.
 - Edgware Road and Hammersmith are each two separate stations a short walk apart; the app treats them as one place to change.
 - Underground and Elizabeth line only. Metropolitan line fast trains aren't included.
+- Bike numbers are live only. Santander Cycles docks cover central and inner London, so many outer stations have none nearby. Lime and other dockless bikes don't publish open data for London, so they aren't included.
 - Piccadilly line figures assume the old trains; the new ones have a different layout.
 
 ## Running it locally
@@ -73,6 +76,7 @@ app.py                  Entry point
 tube/ui.py              Navigation and footer
 tube/seat_page.py       "Will I get a seat?" page
 tube/seats.py           Route planning, seat levels, tips (no Streamlit)
+tube/bikes.py           Nearby docks and bike journey times (no Streamlit)
 tube/station_page.py    "Is my station busy?" page
 tube/client.py          TfL API client
 tube/logic.py           Smoothing, live vs usual, data repair (no Streamlit)
@@ -83,10 +87,11 @@ tests/                  pytest
 
 ## What I'd do next
 
-1. The Overground and DLR (TfL publishes them in the same data).
-2. A rent vs commute tab: what a cheaper flat further out really costs once you add fares and travel time.
-3. A morning alert for your saved journey when the line is disrupted.
-4. Use the live readings the logger is collecting to check how far typical days are from real ones.
+1. Predict bikes and spaces at a dock for a chosen time, from logged dock history.
+2. The Overground and DLR (TfL publishes them in the same data).
+3. A rent vs commute tab: what a cheaper flat further out really costs once you add fares and travel time.
+4. A morning alert for your saved journey when the line is disrupted.
+5. Use the live readings the logger is collecting to check how far typical days are from real ones.
 
 ## Data and licence
 
