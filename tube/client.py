@@ -12,6 +12,7 @@ from typing import Any
 
 import requests
 
+from tube.bikes import Dock, parse_docks
 from tube.models import DAYS, SLOT_MINUTES, SLOTS_PER_DAY, DayProfile, LiveReading, WeekProfile
 
 BASE_URL = "https://api.tfl.gov.uk"
@@ -102,6 +103,15 @@ def parse_live(raw: Any) -> LiveReading | None:
         return None  # the page still works without live data
 
 
+def parse_journey_minutes(raw: Any) -> int | None:
+    """Shortest journey time in TfL's Journey Planner response, or None if it found none."""
+    if not isinstance(raw, dict):
+        return None
+    durations = [j.get("duration") for j in raw.get("journeys") or [] if isinstance(j, dict)]
+    durations = [d for d in durations if isinstance(d, int) and d > 0]
+    return min(durations, default=None)
+
+
 # ---------- HTTP ----------
 
 
@@ -110,8 +120,8 @@ class TflClient:
         self.app_key = app_key
         self.session = session or requests.Session()
 
-    def _get(self, path: str) -> Any:
-        params = {"app_key": self.app_key} if self.app_key else {}
+    def _get(self, path: str, query: dict[str, str] | None = None) -> Any:
+        params = {**(query or {}), **({"app_key": self.app_key} if self.app_key else {})}
         try:
             resp = self.session.get(BASE_URL + path, params=params, timeout=TIMEOUT_SECONDS)
         except requests.RequestException as exc:
@@ -134,3 +144,12 @@ class TflClient:
 
     def live(self, naptan_id: str) -> LiveReading | None:
         return parse_live(self._get(f"/crowding/{naptan_id}/Live"))
+
+    def docks(self) -> list[Dock]:
+        """Every Santander Cycles dock with its live bike and space counts."""
+        return parse_docks(self._get("/BikePoint"))
+
+    def tube_minutes(self, from_id: str, to_id: str) -> int | None:
+        """Station-to-station time by Underground or Elizabeth line, from TfL's Journey Planner."""
+        query = {"mode": "tube,elizabeth-line,walking"}
+        return parse_journey_minutes(self._get(f"/Journey/JourneyResults/{from_id}/to/{to_id}", query))
