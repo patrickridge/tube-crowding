@@ -1,8 +1,15 @@
-# Will I get a seat?
+# Tube crowding: data pipeline and first version
 
 [![CI](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml/badge.svg)](https://github.com/patrickridge/tube-crowding/actions/workflows/ci.yml)
 
-Live app: https://tube-crowding.streamlit.app
+**The main app is now the [London commute planner](https://london-commute-planner.vercel.app)** ([code](https://github.com/patrickridge/london-commute)), a Next.js rebuild of this one. This repo is where the data work lives:
+
+- the Python pipeline that turns TfL's spreadsheets and APIs into the data both apps use (`scripts/`);
+- [what's wrong with TfL's crowding data](docs/DATA_QUALITY.md), and how the apps deal with it;
+- the tested Python logic that the Next.js version was ported from (and is checked against);
+- the first version of the app, built with Streamlit: https://tube-crowding.streamlit.app
+
+The rest of this README describes that Streamlit version.
 
 Pick where you're going from and to, and when you leave. The app works out your route, including changes, and tells you for each part of the journey whether you'll probably get a seat. If not, it says whether leaving a little earlier helps or where seats free up on the way.
 
