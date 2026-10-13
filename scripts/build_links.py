@@ -28,6 +28,11 @@ LINES = {  # NUMBAT name -> name shown in the app
     "Piccadilly": "Piccadilly",
     "Victoria": "Victoria",
     "Waterloo & City": "Waterloo & City",
+    # Only lines whose train sizes TfL publishes (TRAINS in tube/seats.py);
+    # the Overground lines run with Class 710 trains aren't included.
+    "DLR": "DLR",
+    "LO Mildmay": "Mildmay",
+    "LO Windrush": "Windrush",
 }
 
 
@@ -39,14 +44,15 @@ def read_sheet(workbook, name: str) -> tuple[list[str], dict[str, tuple]]:
 
 
 # Platform or line tags that split one station into several nodes, e.g. "Kennington (Bank)".
-TAG = re.compile(r" \((Edgware|High Barnet|Bank|Charing Cross|Bak|DIS|H&C)\)$")
+TAG = re.compile(r" \((Edgware|High Barnet|Bank|Charing Cross|Bak|DIS|H&C|Stratford)\)$")
 
 
 def clean(station: str) -> str:
-    """'Balham LU' -> 'Balham', 'Paddington TfL' -> 'Paddington', 'Kennington (Bank)' -> 'Kennington'."""
-    for suffix in (" LU", " EL", " NR", " LO", " TfL"):
+    """'Balham LU' -> 'Balham', 'Kennington (Bank)' -> 'Kennington',
+    'Canary Wharf DLR (Stratford)' -> 'Canary Wharf'."""
+    station = TAG.sub("", station.strip())  # tag first: 'Canary Wharf DLR (Stratford)'
+    for suffix in (" LU", " EL", " NR", " LO", " DLR", " TfL"):
         station = station.removesuffix(suffix)
-    station = TAG.sub("", station.strip())
     # The Elizabeth line and Piccadilly line spell this station differently.
     return "Heathrow Terminals 2 & 3" if station == "Heathrow Terminals 123" else station
 

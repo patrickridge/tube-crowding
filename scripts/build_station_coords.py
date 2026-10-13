@@ -19,15 +19,18 @@ ALIASES = {
     "Bank and Monument": "940GZZLUBNK",
     "Battersea Power Station": "940GZZBPSUST",
     "Burnham": "910GBNHAM",
+    "Cutty Sark": "940GZZDLCUT",
     "Edgware Road": "940GZZLUERC",
     "Hammersmith": "940GZZLUHSD",
     "Langley": "910GLANGLEY",
+    "New Cross": "910GNWCRELL",
     "Shepherd's Bush": "940GZZLUSBC",
 }
 
 
 def clean(name: str) -> str:
-    for suffix in (" Underground Station", " Rail Station", " (Elizabeth line)", "-Underground"):
+    suffixes = (" Underground Station", " DLR Station", " Rail Station", " (Elizabeth line)", "-Underground")
+    for suffix in suffixes:
         name = name.replace(suffix, "")
     return name.strip()
 
@@ -35,7 +38,7 @@ def clean(name: str) -> str:
 def main() -> None:
     params = {"app_key": key} if (key := app_key_from_env()) else {}
     resp = requests.get(
-        "https://api.tfl.gov.uk/StopPoint/Mode/tube,elizabeth-line", params=params, timeout=60
+        "https://api.tfl.gov.uk/StopPoint/Mode/tube,elizabeth-line,dlr,overground", params=params, timeout=60
     )
     resp.raise_for_status()
     by_name: dict[str, dict] = {}

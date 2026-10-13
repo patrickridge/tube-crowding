@@ -37,6 +37,11 @@ TRAINS = {
     "Piccadilly": Train(228, 798),
     "Victoria": Train(288, 986),
     "Waterloo & City": Train(136, 506),
+    # TfL data sheets: DLR B07 vehicles (64 seats, 292 with standing) in 3-car trains; London
+    # Overground Class 378 five-car trains (186 seats, 906 standing at crush).
+    "DLR": Train(192, 876),
+    "Mildmay": Train(186, 1092),
+    "Windrush": Train(186, 1092),
 }
 
 
